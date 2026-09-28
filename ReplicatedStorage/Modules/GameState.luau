@@ -159,15 +159,7 @@ end
 ----------------------------------------------------
 -- RESTORE: Restaura estado a partir de snapshot
 ----------------------------------------------------
-function GameState.restore(
-	snap: WorldSnapshot,
-	ball: any,
-	playersData: { [number]: any },
-	discs: { any },
-	segments: { any },
-	shapes: { any },
-	matchManager: any?
-)
+function GameState.restore(snap: WorldSnapshot, ball: any, playersData: { [number]: any }, discs: { any }, segments: { any }, shapes: { any },matchManager: any?)
 	-- Restaura estado da partida.
 	if matchManager then
 		matchManager.SetState(
@@ -462,6 +454,110 @@ function GameState.packForNetwork(snap: WorldSnapshot, sortedUserIds: { number }
 	packed[9] = dynSegs
 
 	return packed
+end
+
+function GameState.restorePacked(
+	packed: any,
+	ball: any,
+	playersData: { [number]: any },
+	discs: { any },
+	segments: { any },
+	shapes: { any }
+)
+	local ballArr = packed[5]
+
+	ball.pos = Vector2.new(
+		ballArr[1],
+		ballArr[2]
+	)
+
+	ball.vel = Vector2.new(
+		ballArr[3],
+		ballArr[4]
+	)
+
+	for _, pArr in ipairs(packed[6]) do
+		local p = playersData[pArr[1]]
+
+		if p then
+			p.pos = Vector2.new(
+				pArr[2],
+				pArr[3]
+			)
+
+			p.vel = Vector2.new(
+				pArr[4],
+				pArr[5]
+			)
+
+			p.input = Vector2.new(
+				pArr[6],
+				pArr[7]
+			)
+
+			p.isKicking = pArr[8] == 1
+			p.lastKickTick = pArr[9]
+		end
+	end
+
+	local shapeMap = getObjectMap(shapes)
+
+	for _, sArr in ipairs(packed[7]) do
+		local shape = shapeMap[sArr[1]]
+
+		if shape then
+			shape.pos = Vector2.new(
+				sArr[2],
+				sArr[3]
+			)
+
+			shape.vel = Vector2.new(
+				sArr[4],
+				sArr[5]
+			)
+		end
+	end
+
+	local discMap = getObjectMap(discs)
+
+	for _, dArr in ipairs(packed[8]) do
+		local disc = discMap[dArr[1]]
+
+		if disc then
+			disc.pos = Vector2.new(
+				dArr[2],
+				dArr[3]
+			)
+
+			disc.vel = Vector2.new(
+				dArr[4],
+				dArr[5]
+			)
+		end
+	end
+
+	local segmentMap = getObjectMap(segments)
+
+	for _, segArr in ipairs(packed[9]) do
+		local segment = segmentMap[segArr[1]]
+
+		if segment then
+			segment.a = Vector2.new(
+				segArr[2],
+				segArr[3]
+			)
+
+			segment.b = Vector2.new(
+				segArr[4],
+				segArr[5]
+			)
+
+			segment.vel = Vector2.new(
+				segArr[6],
+				segArr[7]
+			)
+		end
+	end
 end
 
 ----------------------------------------------------
