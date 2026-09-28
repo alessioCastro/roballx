@@ -409,12 +409,34 @@ function PhysicsEngine.Step(
 	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
 	for _, uId in ipairs(sortedUserIds) do
 		local pData = playersData[uId]
+
 		if pData then
+			-- Freio adicional explícito do Ballser.
+			-- É propositalmente separado do friction físico.
+			local decelFactor = phys.playerDecelFactor or 0.88
+
+			pData.vel *= decelFactor
+
+			-- Aplicação de força -> aceleração -> velocidade.
+			-- playerAccel representa aceleração na unidade interna do Roballx.
 			if pData.input and pData.input.Magnitude > 0 then
-				pData.vel += pData.input.Unit * (phys.playerAccel * fpsFactor)
+				local mass = math.max(pData.mass, 0.000001)
+				local force = pData.input.Unit * (phys.playerAccel * mass)
+				local acceleration = force / mass
+
+				pData.vel += acceleration * fixedDt
 			end
-			pData.vel *= math.pow(phys.playerDamping, fpsFactor)
-			pData.pos += pData.vel * fpsFactor
+
+			-- Friction com a mesma semântica do Ballser:
+			-- v *= (1 - friction * dt)
+			local friction = math.clamp(phys.playerFriction or 1, 0, 1)
+			local frictionFactor = math.max(0, 1 - friction * fixedDt)
+
+			pData.vel *= frictionFactor
+
+			-- Integração da posição usando dt real.
+			pData.pos += pData.vel * fixedDt
+
 			if pData.isKicking then
 				PhysicsEngine.tryKick(pData, ball, phys, currentTick)
 			end
