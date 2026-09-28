@@ -27,7 +27,7 @@ MapData.Default = {
 		playerFriction = 1,
 		playerDecelFactor = 0.88,
 		
-		kickForce = 5,
+		kickForce = 300,
 		kickRangeExtra = 4,
 		kickCooldown = 0.3,
 
