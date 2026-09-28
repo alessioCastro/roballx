@@ -336,15 +336,13 @@ function GameState.packLiveState(
 	local dynShapes = {}
 
 	for _, s in ipairs(shapes) do
-		if not s.isStatic then
-			dynShapes[#dynShapes + 1] = {
-				s.id,
-				s.pos.X,
-				s.pos.Y,
-				s.vel.X,
-				s.vel.Y,
-			}
-		end
+		dynShapes[#dynShapes + 1] = {
+			s.id,
+			s.pos.X,
+			s.pos.Y,
+			s.vel.X,
+			s.vel.Y,
+		}
 	end
 
 	packed[7] = dynShapes
@@ -352,17 +350,15 @@ function GameState.packLiveState(
 	local dynDiscs = {}
 
 	for _, d in ipairs(discs) do
-		if not d.isStatic then
-			local vel = d.vel or Vector2.zero
+		local vel = d.vel or Vector2.zero
 
-			dynDiscs[#dynDiscs + 1] = {
-				d.id,
-				d.pos.X,
-				d.pos.Y,
-				vel.X,
-				vel.Y,
-			}
-		end
+		dynDiscs[#dynDiscs + 1] = {
+			d.id,
+			d.pos.X,
+			d.pos.Y,
+			vel.X,
+			vel.Y,
+		}
 	end
 
 	packed[8] = dynDiscs
@@ -370,19 +366,17 @@ function GameState.packLiveState(
 	local dynSegs = {}
 
 	for _, seg in ipairs(segments) do
-		if not seg.isStatic then
-			local vel = seg.vel or Vector2.zero
+		local vel = seg.vel or Vector2.zero
 
-			dynSegs[#dynSegs + 1] = {
-				seg.id,
-				seg.a.X,
-				seg.a.Y,
-				seg.b.X,
-				seg.b.Y,
-				vel.X,
-				vel.Y,
-			}
-		end
+		dynSegs[#dynSegs + 1] = {
+			seg.id,
+			seg.a.X,
+			seg.a.Y,
+			seg.b.X,
+			seg.b.Y,
+			vel.X,
+			vel.Y,
+		}
 	end
 
 	packed[9] = dynSegs
