@@ -285,7 +285,7 @@ end
 ----------------------------------------------------
 -- PACK FOR NETWORK: Formato compacto servidor → cliente
 ----------------------------------------------------
-function GameState.packForNetwork(snap: WorldSnapshot): any
+function GameState.packForNetwork(snap: WorldSnapshot, sortedUserIds: { number }? ): any
 	local packed: any = {}
 	packed[1] = snap.tick
 	packed[2] = snap.scoreRed
@@ -296,24 +296,46 @@ function GameState.packForNetwork(snap: WorldSnapshot): any
 	packed[5] = {snap.ball.posX, snap.ball.posY, snap.ball.velX, snap.ball.velY}
 
 	-- Jogadores em ordem determinística de UserID
-	local playerKeys = {}
-	for uId in pairs(snap.players) do
-		table.insert(playerKeys, uId)
-	end
-	table.sort(playerKeys)
-
 	local playersArr = {}
-	for _, uId in ipairs(playerKeys) do
-		local p = snap.players[uId]
-		table.insert(playersArr, {
-			uId,
-			p.posX, p.posY,
-			p.velX, p.velY,
-			p.inputX, p.inputY,
-			p.isKicking and 1 or 0,
-			p.lastKickTick,
-			p.team == "Red" and 1 or 2,
-		})
+
+	if sortedUserIds then
+		for _, uId in ipairs(sortedUserIds) do
+			local p = snap.players[uId]
+
+			if p then
+				table.insert(playersArr, {
+					uId,
+					p.posX, p.posY,
+					p.velX, p.velY,
+					p.inputX, p.inputY,
+					p.isKicking and 1 or 0,
+					p.lastKickTick,
+					p.team == "Red" and 1 or 2,
+				})
+			end
+		end
+	else
+		local playerKeys = {}
+
+		for uId in pairs(snap.players) do
+			table.insert(playerKeys, uId)
+		end
+
+		table.sort(playerKeys)
+
+		for _, uId in ipairs(playerKeys) do
+			local p = snap.players[uId]
+
+			table.insert(playersArr, {
+				uId,
+				p.posX, p.posY,
+				p.velX, p.velY,
+				p.inputX, p.inputY,
+				p.isKicking and 1 or 0,
+				p.lastKickTick,
+				p.team == "Red" and 1 or 2,
+			})
+		end
 	end
 	packed[6] = playersArr
 
