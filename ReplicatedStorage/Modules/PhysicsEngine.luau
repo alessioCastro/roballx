@@ -448,14 +448,15 @@ function PhysicsEngine.Step(
 	for _, disc in ipairs(discs) do
 		if disc.isStatic == false then
 			disc.vel = (disc.vel or Vector2.zero) * math.pow(disc.damping or 0.98, fpsFactor)
-			disc.pos += (disc.vel or Vector2.zero) * fpsFactor
+			disc.pos += disc.vel * fixedDt
 		end
 	end
 
 	for _, seg in ipairs(segments) do
 		if seg.isStatic == false then
 			seg.vel = (seg.vel or Vector2.zero) * math.pow(seg.damping or 0.98, fpsFactor)
-			local delta = (seg.vel or Vector2.zero) * fpsFactor
+
+			local delta = seg.vel * fixedDt
 			seg.a += delta
 			seg.b += delta
 		end
@@ -464,7 +465,7 @@ function PhysicsEngine.Step(
 	for _, shape in ipairs(shapes) do
 		if shape.isStatic == false then
 			shape.vel = (shape.vel or Vector2.zero) * math.pow(shape.damping or 0.98, fpsFactor)
-			shape.pos += (shape.vel or Vector2.zero) * fpsFactor
+			shape.pos += shape.vel * fixedDt
 		end
 	end
 
