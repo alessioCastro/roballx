@@ -395,17 +395,7 @@ end
 ----------------------------------------------------
 -- 6. STEP DA FÍSICA INTEGRADO
 ----------------------------------------------------
-function PhysicsEngine.Step(
-	ball: CircleObject, 
-	playersData: { [number]: CircleObject }, 
-	sortedUserIds: { number },
-	discs: { CircleObject }, 
-	segments: { Segment }, 
-	shapes: { PhysicalShape },
-	phys: any, 
-	fixedDt: number,
-	currentTick: number
-)
+function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, phys, fixedDt, currentTick)
 	local fpsFactor = fixedDt * 60 -- sempre 1.0 quando fixedDt = 1/60
 
 	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
@@ -478,33 +468,38 @@ function PhysicsEngine.Step(
 		ball.pos += ball.vel * subDt
 
 		for iter = 1, 2 do
-			for _, disc in ipairs(discs) do
+			for _, disc in ipairs(collisionDiscs) do
 				PhysicsEngine.resolveCircleCollision(ball, disc)
 			end
-			for _, seg in ipairs(segments) do
+
+			for _, seg in ipairs(collisionSegments) do
 				PhysicsEngine.resolveSegmentCollision(ball, seg)
 			end
-			for _, shape in ipairs(shapes) do
+
+			for _, shape in ipairs(collisionShapes) do
 				PhysicsEngine.resolveShapeCollision(ball, shape)
 			end
 		end
 	end
 
 	for iter = 1, 2 do
-		for i = 1, #shapes do
-			for j = i + 1, #shapes do
-				PhysicsEngine.resolveShapeVsShapeCollision(shapes[i], shapes[j])
+		for i = 1, #collisionShapes do
+			for j = i + 1, #collisionShapes do
+				PhysicsEngine.resolveShapeVsShapeCollision(
+					collisionShapes[i],
+					collisionShapes[j]
+				)
 			end
 		end
 
-		for _, shape in ipairs(shapes) do
-			for _, seg in ipairs(segments) do
+		for _, shape in ipairs(collisionShapes) do
+			for _, seg in ipairs(collisionSegments) do
 				PhysicsEngine.resolveShapeVsSegmentCollision(shape, seg)
 			end
 		end
 
-		for _, shape in ipairs(shapes) do
-			for _, disc in ipairs(discs) do
+		for _, shape in ipairs(collisionShapes) do
+			for _, disc in ipairs(collisionDiscs) do
 				PhysicsEngine.resolveShapeCollision(disc, shape)
 			end
 		end
@@ -514,7 +509,7 @@ function PhysicsEngine.Step(
 			local pA = playersData[uIdA]
 			if pA then
 				PhysicsEngine.resolveCircleCollision(pA, ball)
-				for _, disc in ipairs(discs) do
+				for _, disc in ipairs(collisionDiscs) do
 					PhysicsEngine.resolveCircleCollision(pA, disc)
 				end
 				for idxB = idxA + 1, #sortedUserIds do
@@ -523,10 +518,10 @@ function PhysicsEngine.Step(
 						PhysicsEngine.resolveCircleCollision(pA, pB)
 					end
 				end
-				for _, seg in ipairs(segments) do
+				for _, seg in ipairs(collisionSegments) do
 					PhysicsEngine.resolveSegmentCollision(pA, seg)
 				end
-				for _, shape in ipairs(shapes) do
+				for _, shape in ipairs(collisionShapes) do
 					PhysicsEngine.resolveShapeCollision(pA, shape)
 				end
 			end
@@ -534,7 +529,7 @@ function PhysicsEngine.Step(
 
 		for _, disc in ipairs(discs) do
 			if disc.isStatic == false then
-				for _, seg in ipairs(segments) do
+				for _, seg in ipairs(collisionSegments) do
 					PhysicsEngine.resolveSegmentCollision(disc, seg)
 				end
 			end
