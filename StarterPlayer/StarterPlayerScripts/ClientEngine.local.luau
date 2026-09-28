@@ -464,7 +464,7 @@ end
 
 gameSnapshotEvent.OnClientEvent:Connect(function(packed)
 	local snap = GameState.unpackFromNetwork(packed)
-	local serverTick = snap.tick
+	local serverTick = packed[1]
 
 	if serverTick <= lastConfirmedTick then
 		return
