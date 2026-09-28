@@ -206,6 +206,30 @@ for _, s in ipairs(shapes) do
 	end
 end
 
+local collisionDiscs = {}
+
+for _, d in ipairs(discs) do
+	if d.isSolid ~= false then
+		collisionDiscs[#collisionDiscs + 1] = d
+	end
+end
+
+local collisionSegments = {}
+
+for _, seg in ipairs(segments) do
+	if seg.isSolid ~= false then
+		collisionSegments[#collisionSegments + 1] = seg
+	end
+end
+
+local collisionShapes = {}
+
+for _, s in ipairs(shapes) do
+	if s.isSolid ~= false then
+		collisionShapes[#collisionShapes + 1] = s
+	end
+end
+
 ----------------------------------------------------
 -- INPUT BUFFER
 ----------------------------------------------------
@@ -304,7 +328,7 @@ RunService.Heartbeat:Connect(function(dt)
 		applyInputsForTick(currentTick)
 
 		-- 2. Step da física
-		PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, phys, FIXED_DT, currentTick)
+		PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, phys, FIXED_DT, currentTick)
 
 		-- 3. Checar gols (determinístico, tick-based)
 		MatchManager.CheckGoals(ball, currentMap, playersData)
