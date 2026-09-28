@@ -21,17 +21,19 @@ MapData.Default = {
 	},
 
 	physics = {
-		playerAccel = 0.15,
-		playerDamping = 0.96,
-		ballDamping = 0.99,
+		playerRadius = 18,
+		playerMass = 5,
+		playerAccel = 1200,
+		playerFriction = 1,
+		playerDecelFactor = 0.88,
+		
 		kickForce = 5,
 		kickRangeExtra = 4,
 		kickCooldown = 0.3,
 
-		playerRadius = 18,
 		ballRadius = 13,
-		playerMass = 1,
-		ballMass = 0.25,
+		ballMass = 1,
+		ballDamping = 0.99,
 
 		ballGroup = {"ball"},
 		ballMask = "all",
@@ -114,7 +116,7 @@ MapData.Default = {
 			strokeWidth = 3,
 			strokeColor = Color3.fromRGB(0, 0, 0),
 			isSolid = true,
-			restitution = 0.96,
+			restitution = 0.1,
 			cGroup = {"obstacle"},
 			cMask = "all",
 		},
@@ -130,9 +132,9 @@ MapData.Default = {
 			strokeColor = Color3.fromRGB(0, 0, 0),
 			isSolid = true,
 			isStatic = false,
-			mass = 0.5,
+			mass = 1,
 			damping = 0.96,
-			restitution = 0.8,
+			restitution = 0.1,
 			cGroup = {"obstacle"},
 			cMask = {"goal", "player"},
 		}
