@@ -304,7 +304,18 @@ RunService.Heartbeat:Connect(function(dt)
 			currentTick, ball, playersData, discs, segments, shapes,
 			scoreRed, scoreBlue, MatchManager.GetResetCountdown()
 		)
-		local packed = GameState.packForNetwork(snap, sortedUserIds)
+		local packed = GameState.packLiveState(
+			currentTick,
+			ball,
+			playersData,
+			discs,
+			segments,
+			shapes,
+			scoreRed,
+			scoreBlue,
+			MatchManager.GetResetCountdown(),
+			sortedUserIds
+		)
 		gameSnapshotEvent:FireAllClients(packed)
 	end
 end)
