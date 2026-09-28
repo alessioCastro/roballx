@@ -4,6 +4,32 @@
 
 local GameState = {}
 
+-- Cache dos mapas de objetos dinâmicos.
+-- A identidade das tabelas de objetos permanece estável durante a partida.
+local objectMapCache = setmetatable({}, { __mode = "k" })
+
+local function getObjectMap(objects: { any }): { [string]: any }
+	local cached = objectMapCache[objects]
+
+	if cached then
+		return cached
+	end
+
+	local map = {}
+
+	for _, object in ipairs(objects) do
+		local id = object.id
+
+		if id then
+			map[id] = object
+		end
+	end
+
+	objectMapCache[objects] = map
+
+	return map
+end
+
 export type InputData = {
 	moveX: number,
 	moveY: number,
@@ -140,69 +166,117 @@ function GameState.restore(
 	discs: { any },
 	segments: { any },
 	shapes: { any },
-	matchManager: any? -- Passado para sincronizar placar e countdown no rollback
+	matchManager: any?
 )
-	-- Restaura estado da partida (placar e countdown)
+	-- Restaura estado da partida.
 	if matchManager then
-		matchManager.SetState(snap.scoreRed, snap.scoreBlue, snap.resetCountdown)
+		matchManager.SetState(
+			snap.scoreRed,
+			snap.scoreBlue,
+			snap.resetCountdown
+		)
 	end
 
 	-- Bola
-	ball.pos = Vector2.new(snap.ball.posX, snap.ball.posY)
-	ball.vel = Vector2.new(snap.ball.velX, snap.ball.velY)
+	ball.pos = Vector2.new(
+		snap.ball.posX,
+		snap.ball.posY
+	)
+
+	ball.vel = Vector2.new(
+		snap.ball.velX,
+		snap.ball.velY
+	)
 
 	-- Jogadores
 	for uId, pSnap in pairs(snap.players) do
 		local p = playersData[uId]
+
 		if p then
-			p.pos = Vector2.new(pSnap.posX, pSnap.posY)
-			p.vel = Vector2.new(pSnap.velX, pSnap.velY)
-			p.input = Vector2.new(pSnap.inputX, pSnap.inputY)
+			p.pos = Vector2.new(
+				pSnap.posX,
+				pSnap.posY
+			)
+
+			p.vel = Vector2.new(
+				pSnap.velX,
+				pSnap.velY
+			)
+
+			p.input = Vector2.new(
+				pSnap.inputX,
+				pSnap.inputY
+			)
+
 			p.isKicking = pSnap.isKicking
 			p.lastKickTick = pSnap.lastKickTick
 		end
 	end
 
-	-- Mapas de ID temporários para restauração O(N + M) rápida sem loops aninhados
+	-- Objetos dinâmicos.
+	-- Os mapas são construídos apenas na primeira restauração
+	-- e reutilizados nas restaurações seguintes.
 	if #snap.discs > 0 then
-		local discMap = {}
-		for _, d in ipairs(discs) do
-			if d.id then discMap[d.id] = d end
-		end
+		local discMap = getObjectMap(discs)
+
 		for _, dSnap in ipairs(snap.discs) do
 			local d = discMap[dSnap.id]
+
 			if d then
-				d.pos = Vector2.new(dSnap.posX, dSnap.posY)
-				d.vel = Vector2.new(dSnap.velX, dSnap.velY)
+				d.pos = Vector2.new(
+					dSnap.posX,
+					dSnap.posY
+				)
+
+				d.vel = Vector2.new(
+					dSnap.velX,
+					dSnap.velY
+				)
 			end
 		end
 	end
 
 	if #snap.segments > 0 then
-		local segMap = {}
-		for _, seg in ipairs(segments) do
-			if seg.id then segMap[seg.id] = seg end
-		end
+		local segmentMap = getObjectMap(segments)
+
 		for _, sSnap in ipairs(snap.segments) do
-			local seg = segMap[sSnap.id]
+			local seg = segmentMap[sSnap.id]
+
 			if seg then
-				seg.a = Vector2.new(sSnap.aX, sSnap.aY)
-				seg.b = Vector2.new(sSnap.bX, sSnap.bY)
-				seg.vel = Vector2.new(sSnap.velX, sSnap.velY)
+				seg.a = Vector2.new(
+					sSnap.aX,
+					sSnap.aY
+				)
+
+				seg.b = Vector2.new(
+					sSnap.bX,
+					sSnap.bY
+				)
+
+				seg.vel = Vector2.new(
+					sSnap.velX,
+					sSnap.velY
+				)
 			end
 		end
 	end
 
 	if #snap.shapes > 0 then
-		local shapeMap = {}
-		for _, s in ipairs(shapes) do
-			if s.id then shapeMap[s.id] = s end
-		end
+		local shapeMap = getObjectMap(shapes)
+
 		for _, sSnap in ipairs(snap.shapes) do
 			local s = shapeMap[sSnap.id]
+
 			if s then
-				s.pos = Vector2.new(sSnap.posX, sSnap.posY)
-				s.vel = Vector2.new(sSnap.velX, sSnap.velY)
+				s.pos = Vector2.new(
+					sSnap.posX,
+					sSnap.posY
+				)
+
+				s.vel = Vector2.new(
+					sSnap.velX,
+					sSnap.velY
+				)
 			end
 		end
 	end
