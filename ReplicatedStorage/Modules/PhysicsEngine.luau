@@ -470,11 +470,12 @@ function PhysicsEngine.Step(
 	end
 
 	local steps = math.clamp(math.ceil(ball.vel.Magnitude / 6), 1, 4)
-	local subFactor = fpsFactor / steps
+	local subDt = fixedDt / steps
+	local dampingFactor = math.pow(phys.ballDamping, 1 / steps)
 
 	for _ = 1, steps do
-		ball.vel *= math.pow(phys.ballDamping, subFactor)
-		ball.pos += ball.vel * subFactor
+		ball.vel *= dampingFactor
+		ball.pos += ball.vel * subDt
 
 		for iter = 1, 2 do
 			for _, disc in ipairs(discs) do
