@@ -277,6 +277,27 @@ for _, object in ipairs(segments) do
 	end
 end
 
+local collisionDiscs = {}
+for _, d in ipairs(discs) do
+	if d.isSolid ~= false then
+		collisionDiscs[#collisionDiscs + 1] = d
+	end
+end
+
+local collisionSegments = {}
+for _, seg in ipairs(segments) do
+	if seg.isSolid ~= false then
+		collisionSegments[#collisionSegments + 1] = seg
+	end
+end
+
+local collisionShapes = {}
+for _, s in ipairs(shapes) do
+	if s.isSolid ~= false then
+		collisionShapes[#collisionShapes + 1] = s
+	end
+end
+
 ----------------------------------------------------
 -- ESTADO DE REDE
 ----------------------------------------------------
@@ -580,6 +601,9 @@ gameSnapshotEvent.OnClientEvent:Connect(function(packed)
 				discs,
 				segments,
 				shapes,
+				collisionDiscs,
+				collisionSegments,
+				collisionShapes,
 				phys,
 				FIXED_DT,
 				replayTick
@@ -648,6 +672,9 @@ RunService.Heartbeat:Connect(function(dt)
 			discs,
 			segments,
 			shapes,
+			collisionDiscs,
+			collisionSegments,
+			collisionShapes,
 			phys,
 			FIXED_DT,
 			localTick
