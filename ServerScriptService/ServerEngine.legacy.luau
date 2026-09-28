@@ -291,6 +291,10 @@ RunService.Heartbeat:Connect(function(dt)
 		-- 4. Avançar tick
 		currentTick += 1
 		accumulator -= FIXED_DT
+		
+		if currentTick % 30 == 0 then
+			inputBuffer:clearBefore(currentTick - 180)
+		end
 	end
 
 	-- 5. Broadcast de snapshot a cada N ticks
@@ -303,7 +307,4 @@ RunService.Heartbeat:Connect(function(dt)
 		local packed = GameState.packForNetwork(snap)
 		gameSnapshotEvent:FireAllClients(packed)
 	end
-
-	-- Limpar inputs antigos (manter ~3 segundos de histórico)
-	inputBuffer:clearBefore(currentTick - 180)
 end)
