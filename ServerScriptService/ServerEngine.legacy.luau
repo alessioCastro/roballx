@@ -185,6 +185,27 @@ if currentMap.shapes then
 	end
 end
 
+local dynamicDiscs = {}
+for _, d in ipairs(discs) do
+	if not d.isStatic then
+		dynamicDiscs[#dynamicDiscs + 1] = d
+	end
+end
+
+local dynamicSegments = {}
+for _, seg in ipairs(segments) do
+	if not seg.isStatic then
+		dynamicSegments[#dynamicSegments + 1] = seg
+	end
+end
+
+local dynamicShapes = {}
+for _, s in ipairs(shapes) do
+	if not s.isStatic then
+		dynamicShapes[#dynamicShapes + 1] = s
+	end
+end
+
 ----------------------------------------------------
 -- INPUT BUFFER
 ----------------------------------------------------
@@ -300,17 +321,13 @@ RunService.Heartbeat:Connect(function(dt)
 	-- 5. Broadcast de snapshot a cada N ticks
 	if currentTick > 0 and currentTick % SNAPSHOT_INTERVAL == 0 then
 		local scoreRed, scoreBlue = MatchManager.GetScore()
-		local snap = GameState.snapshot(
-			currentTick, ball, playersData, discs, segments, shapes,
-			scoreRed, scoreBlue, MatchManager.GetResetCountdown()
-		)
 		local packed = GameState.packLiveState(
 			currentTick,
 			ball,
 			playersData,
-			discs,
-			segments,
-			shapes,
+			dynamicDiscs,
+			dynamicSegments,
+			dynamicShapes,
 			scoreRed,
 			scoreBlue,
 			MatchManager.GetResetCountdown(),
