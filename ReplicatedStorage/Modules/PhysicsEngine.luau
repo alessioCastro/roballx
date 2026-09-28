@@ -368,7 +368,9 @@ function PhysicsEngine.resolveCircleCollision(a: CircleObject, b: CircleObject)
 		local velAlongNormal = relativeVel:Dot(normal)
 
 		if velAlongNormal < 0 then
-			local e = math.min(a.restitution, b.restitution)
+			local speed = relativeVel.Magnitude
+			local eBase = math.min(a.restitution, b.restitution)
+			local e = speed < 30 and (eBase * 0.2) or eBase
 			local impulseMagnitude = -(1 + e) * velAlongNormal / (1/a.mass + 1/b.mass)
 			local impulse = normal * impulseMagnitude
 			a.vel -= impulse / a.mass
