@@ -555,8 +555,8 @@ gameSnapshotEvent.OnClientEvent:Connect(function(packed)
 	-- ROLLBACK
 	------------------------------------------------
 
-	GameState.restore(
-		snap,
+	GameState.restorePacked(
+		packed,
 		ball,
 		playersData,
 		discs,
