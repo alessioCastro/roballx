@@ -124,32 +124,32 @@ function GameState.snapshot(
 
 	for _, d in ipairs(discs) do
 		if not d.isStatic then
-			table.insert(snap.discs, {
+			snap.discs[#snap.discs + 1] = {
 				id = d.id,
 				posX = d.pos.X, posY = d.pos.Y,
 				velX = (d.vel or Vector2.zero).X, velY = (d.vel or Vector2.zero).Y,
-			})
+			}
 		end
 	end
 
 	for _, seg in ipairs(segments) do
 		if not seg.isStatic then
-			table.insert(snap.segments, {
+			snap.segments[#snap.segments + 1] = {
 				id = seg.id,
 				aX = seg.a.X, aY = seg.a.Y,
 				bX = seg.b.X, bY = seg.b.Y,
 				velX = (seg.vel or Vector2.zero).X, velY = (seg.vel or Vector2.zero).Y,
-			})
+			}
 		end
 	end
 
 	for _, s in ipairs(shapes) do
 		if not s.isStatic then
-			table.insert(snap.shapes, {
+			snap.shapes[#snap.shapes + 1] = {
 				id = s.id,
 				posX = s.pos.X, posY = s.pos.Y,
 				velX = (s.vel or Vector2.zero).X, velY = (s.vel or Vector2.zero).Y,
-			})
+			}
 		end
 	end
 
@@ -280,6 +280,114 @@ function GameState.restore(
 			end
 		end
 	end
+end
+
+function GameState.packLiveState(
+	tick: number,
+	ball: any,
+	playersData: { [number]: any },
+	discs: { any },
+	segments: { any },
+	shapes: { any },
+	scoreRed: number,
+	scoreBlue: number,
+	resetCountdown: number,
+	sortedUserIds: { number }
+): any
+	local packed: any = {}
+
+	packed[1] = tick
+	packed[2] = scoreRed
+	packed[3] = scoreBlue
+	packed[4] = resetCountdown
+
+	packed[5] = {
+		ball.pos.X,
+		ball.pos.Y,
+		ball.vel.X,
+		ball.vel.Y,
+	}
+
+	local playersArr = {}
+
+	for _, uId in ipairs(sortedUserIds) do
+		local p = playersData[uId]
+
+		if p then
+			local input = p.input
+
+			playersArr[#playersArr + 1] = {
+				uId,
+				p.pos.X,
+				p.pos.Y,
+				p.vel.X,
+				p.vel.Y,
+				input and input.X or 0,
+				input and input.Y or 0,
+				p.isKicking and 1 or 0,
+				p.lastKickTick or -9999,
+				p.team == "Red" and 1 or 2,
+			}
+		end
+	end
+
+	packed[6] = playersArr
+
+	local dynShapes = {}
+
+	for _, s in ipairs(shapes) do
+		if not s.isStatic then
+			dynShapes[#dynShapes + 1] = {
+				s.id,
+				s.pos.X,
+				s.pos.Y,
+				s.vel.X,
+				s.vel.Y,
+			}
+		end
+	end
+
+	packed[7] = dynShapes
+
+	local dynDiscs = {}
+
+	for _, d in ipairs(discs) do
+		if not d.isStatic then
+			local vel = d.vel or Vector2.zero
+
+			dynDiscs[#dynDiscs + 1] = {
+				d.id,
+				d.pos.X,
+				d.pos.Y,
+				vel.X,
+				vel.Y,
+			}
+		end
+	end
+
+	packed[8] = dynDiscs
+
+	local dynSegs = {}
+
+	for _, seg in ipairs(segments) do
+		if not seg.isStatic then
+			local vel = seg.vel or Vector2.zero
+
+			dynSegs[#dynSegs + 1] = {
+				seg.id,
+				seg.a.X,
+				seg.a.Y,
+				seg.b.X,
+				seg.b.Y,
+				vel.X,
+				vel.Y,
+			}
+		end
+	end
+
+	packed[9] = dynSegs
+
+	return packed
 end
 
 ----------------------------------------------------
