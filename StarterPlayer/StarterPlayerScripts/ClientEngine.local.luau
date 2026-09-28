@@ -476,9 +476,10 @@ gameSnapshotEvent.OnClientEvent:Connect(function(packed)
 	-- HUD
 	------------------------------------------------
 
-	localScoreRed = snap.scoreRed
-	localScoreBlue = snap.scoreBlue
-	localResetCountdown = snap.resetCountdown
+
+	localScoreRed = packed[2]
+	localScoreBlue = packed[3]
+	localResetCountdown = packed[4]
 
 	hud:UpdateScore(
 		localScoreRed,
@@ -491,34 +492,36 @@ gameSnapshotEvent.OnClientEvent:Connect(function(packed)
 
 	local activeIds = {}
 
-	for uId, pSnap in pairs(snap.players) do
+	for _, pArr in ipairs(packed[6]) do
+		local uId = pArr[1]
+
 		activeIds[uId] = true
 
 		if not playersData[uId] then
 			playersData[uId] = {
 				pos = Vector2.new(
-					pSnap.posX,
-					pSnap.posY
+					pArr[2],
+					pArr[3]
 				),
 
 				vel = Vector2.new(
-					pSnap.velX,
-					pSnap.velY
+					pArr[4],
+					pArr[5]
 				),
 
 				radius = phys.playerRadius,
 				mass = phys.playerMass,
 				restitution = 0.1,
 
-				team = pSnap.team,
+				team = pArr[10] == 1 and "Red" or "Blue",
 
 				input = Vector2.new(
-					pSnap.inputX,
-					pSnap.inputY
+					pArr[6],
+					pArr[7]
 				),
 
-				isKicking = pSnap.isKicking,
-				lastKickTick = pSnap.lastKickTick,
+				isKicking = pArr[8] == 1,
+				lastKickTick = pArr[9],
 
 				isSolid = true,
 				isStatic = false,
