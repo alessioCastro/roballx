@@ -1,3 +1,4 @@
+```lua
 --!strict
 -- SpatialHash.luau
 -- Broadphase determinística por grid espacial.
@@ -16,9 +17,16 @@ export type Entry = {
 	object: any,
 	index: number,
 	aabb: AABB,
+
 	cells: {string},
 	cellIndices: {[string]: number},
+
 	gridIndex: number,
+
+	minCellX: number,
+	maxCellX: number,
+	minCellY: number,
+	maxCellY: number,
 }
 
 export type Grid = {
@@ -62,9 +70,16 @@ function SpatialHash.insert(
 		object = object,
 		index = index,
 		aabb = aabb,
+
 		cells = {},
 		cellIndices = {},
+
 		gridIndex = #grid.entries + 1,
+
+		minCellX = minCellX,
+		maxCellX = maxCellX,
+		minCellY = minCellY,
+		maxCellY = maxCellY,
 	}
 
 	grid.entries[entry.gridIndex] = entry
@@ -83,6 +98,7 @@ function SpatialHash.insert(
 			local cellIndex = #cell + 1
 
 			cell[cellIndex] = entry
+
 			entry.cells[#entry.cells + 1] = key
 			entry.cellIndices[key] = cellIndex
 		end
@@ -133,6 +149,7 @@ function SpatialHash.remove(
 
 	table.clear(entry.cells)
 	table.clear(entry.cellIndices)
+
 	entry.gridIndex = 0
 end
 
@@ -141,6 +158,24 @@ function SpatialHash.update(
 	entry: Entry,
 	aabb: AABB
 ): Entry
+
+	local minCellX = getCellCoordinate(aabb.minX, grid.cellSize)
+	local maxCellX = getCellCoordinate(aabb.maxX, grid.cellSize)
+
+	local minCellY = getCellCoordinate(aabb.minY, grid.cellSize)
+	local maxCellY = getCellCoordinate(aabb.maxY, grid.cellSize)
+
+	-- Se continua exatamente nas mesmas células,
+	-- basta atualizar a AABB.
+	if
+		entry.minCellX == minCellX
+		and entry.maxCellX == maxCellX
+		and entry.minCellY == minCellY
+		and entry.maxCellY == maxCellY
+	then
+		entry.aabb = aabb
+		return entry
+	end
 
 	local object = entry.object
 	local index = entry.index
@@ -259,3 +294,4 @@ function SpatialHash.rebuild(
 end
 
 return SpatialHash
+```
