@@ -1,4 +1,3 @@
-```lua
 --!strict
 -- SpatialHash.luau
 -- Broadphase determinística por grid espacial.
@@ -294,4 +293,3 @@ function SpatialHash.rebuild(
 end
 
 return SpatialHash
-```
