@@ -730,6 +730,12 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 	end
 
 	for iter = 1, 2 do
+		PhysicsEngine.rebuildPlayerBroadphase(
+			broadphase,
+			playersData,
+			sortedUserIds
+		)
+		
 		for i = 1, #collisionShapes do
 			for j = i + 1, #collisionShapes do
 				PhysicsEngine.resolveShapeVsShapeCollision(
