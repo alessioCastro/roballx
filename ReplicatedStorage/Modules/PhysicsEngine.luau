@@ -104,26 +104,44 @@ local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
 end
 
 local function getClosestPointsBetweenSegments(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2): (Vector2, Vector2, number)
-	local candidates = {
-		{ a1, closestPointOnSegment(a1, b1, b2) },
-		{ a2, closestPointOnSegment(a2, b1, b2) },
-		{ closestPointOnSegment(b1, a1, a2), b1 },
-		{ closestPointOnSegment(b2, a1, a2), b2 },
-	}
 
-	local bestA, bestB = candidates[1][1], candidates[1][2]
+	local bestA = a1
+	local bestB = closestPointOnSegment(a1, b1, b2)
+
 	local delta = bestB - bestA
 	local minDistSq = delta:Dot(delta)
 
-	for i = 2, 4 do
-		local pA, pB = candidates[i][1], candidates[i][2]
-		local d = pB - pA
-		local distSq = d:Dot(d)
-		if distSq < minDistSq then
-			minDistSq = distSq
-			bestA = pA
-			bestB = pB
-		end
+	local pA = a2
+	local pB = closestPointOnSegment(a2, b1, b2)
+	delta = pB - pA
+	local distSq = delta:Dot(delta)
+
+	if distSq < minDistSq then
+		minDistSq = distSq
+		bestA = pA
+		bestB = pB
+	end
+
+	pA = closestPointOnSegment(b1, a1, a2)
+	pB = b1
+	delta = pB - pA
+	distSq = delta:Dot(delta)
+
+	if distSq < minDistSq then
+		minDistSq = distSq
+		bestA = pA
+		bestB = pB
+	end
+
+	pA = closestPointOnSegment(b2, a1, a2)
+	pB = b2
+	delta = pB - pA
+	distSq = delta:Dot(delta)
+
+	if distSq < minDistSq then
+		minDistSq = distSq
+		bestA = pA
+		bestB = pB
 	end
 
 	return bestA, bestB, math.sqrt(minDistSq)
@@ -396,8 +414,6 @@ end
 -- 6. STEP DA FÍSICA INTEGRADO
 ----------------------------------------------------
 function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, phys, fixedDt, currentTick)
-	local fpsFactor = fixedDt * 60 -- sempre 1.0 quando fixedDt = 1/60
-
 	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
 	for _, uId in ipairs(sortedUserIds) do
 		local pData = playersData[uId]
@@ -437,14 +453,14 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 
 	for _, disc in ipairs(discs) do
 		if disc.isStatic == false then
-			disc.vel = (disc.vel or Vector2.zero) * math.pow(disc.damping or 0.98, fpsFactor)
+			disc.vel = (disc.vel or Vector2.zero) * (disc.damping or 0.98)
 			disc.pos += disc.vel * fixedDt
 		end
 	end
 
 	for _, seg in ipairs(segments) do
 		if seg.isStatic == false then
-			seg.vel = (seg.vel or Vector2.zero) * math.pow(seg.damping or 0.98, fpsFactor)
+			seg.vel = (seg.vel or Vector2.zero) * (seg.damping or 0.98)
 
 			local delta = seg.vel * fixedDt
 			seg.a += delta
@@ -454,7 +470,7 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 
 	for _, shape in ipairs(shapes) do
 		if shape.isStatic == false then
-			shape.vel = (shape.vel or Vector2.zero) * math.pow(shape.damping or 0.98, fpsFactor)
+			shape.vel = (shape.vel or Vector2.zero) * (shape.damping or 0.98)
 			shape.pos += shape.vel * fixedDt
 		end
 	end
