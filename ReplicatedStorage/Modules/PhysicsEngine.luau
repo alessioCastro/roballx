@@ -1,6 +1,8 @@
 --!strict
 local PhysicsEngine = {}
 
+local SpatialHash = require(script.Parent.SpatialHash)
+
 local DEFAULT_MASK = 0xFFFFFFFF
 
 export type CircleObject = {
@@ -57,6 +59,151 @@ export type PhysicalShape = {
 	segmentP2: Vector2,
 	segmentRadius: number,
 }
+
+export type Broadphase = {
+	discGrid: SpatialHash.Grid,
+	segmentGrid: SpatialHash.Grid,
+	shapeGrid: SpatialHash.Grid,
+
+	discIndex: {[any]: number},
+	segmentIndex: {[any]: number},
+	shapeIndex: {[any]: number},
+}
+
+----------------------------------------------------
+-- BROADPHASE / AABB
+----------------------------------------------------
+
+local function getCircleAABB(circle: CircleObject): SpatialHash.AABB
+	local radius = circle.radius
+
+	return {
+		minX = circle.pos.X - radius,
+		minY = circle.pos.Y - radius,
+		maxX = circle.pos.X + radius,
+		maxY = circle.pos.Y + radius,
+	}
+end
+
+local function getSegmentAABB(segment: Segment): SpatialHash.AABB
+	local halfThickness = (segment.thickness or 0) * 0.5
+
+	local minX = math.min(segment.a.X, segment.b.X) - halfThickness
+	local minY = math.min(segment.a.Y, segment.b.Y) - halfThickness
+	local maxX = math.max(segment.a.X, segment.b.X) + halfThickness
+	local maxY = math.max(segment.a.Y, segment.b.Y) + halfThickness
+
+	return {
+		minX = minX,
+		minY = minY,
+		maxX = maxX,
+		maxY = maxY,
+	}
+end
+
+local function getShapeAABB(shape: PhysicalShape): SpatialHash.AABB
+	local p1 = shape.pos + shape.segmentP1
+	local p2 = shape.pos + shape.segmentP2
+	local radius = shape.segmentRadius
+
+	return {
+		minX = math.min(p1.X, p2.X) - radius,
+		minY = math.min(p1.Y, p2.Y) - radius,
+		maxX = math.max(p1.X, p2.X) + radius,
+		maxY = math.max(p1.Y, p2.Y) + radius,
+	}
+end
+
+function PhysicsEngine.createBroadphase(
+	collisionDiscs: {CircleObject},
+	collisionSegments: {Segment},
+	collisionShapes: {PhysicalShape},
+	cellSize: number
+): Broadphase
+
+	local broadphase: Broadphase = {
+		discGrid = SpatialHash.new(cellSize),
+		segmentGrid = SpatialHash.new(cellSize),
+		shapeGrid = SpatialHash.new(cellSize),
+
+		discIndex = {},
+		segmentIndex = {},
+		shapeIndex = {},
+	}
+
+	for index, disc in ipairs(collisionDiscs) do
+		broadphase.discIndex[disc] = index
+
+		SpatialHash.insert(
+			broadphase.discGrid,
+			disc,
+			getCircleAABB(disc),
+			index
+		)
+	end
+
+	for index, segment in ipairs(collisionSegments) do
+		broadphase.segmentIndex[segment] = index
+
+		SpatialHash.insert(
+			broadphase.segmentGrid,
+			segment,
+			getSegmentAABB(segment),
+			index
+		)
+	end
+
+	for index, shape in ipairs(collisionShapes) do
+		broadphase.shapeIndex[shape] = index
+
+		SpatialHash.insert(
+			broadphase.shapeGrid,
+			shape,
+			getShapeAABB(shape),
+			index
+		)
+	end
+
+	return broadphase
+end
+
+function PhysicsEngine.rebuildBroadphase(
+	broadphase: Broadphase,
+	collisionDiscs: {CircleObject},
+	collisionSegments: {Segment},
+	collisionShapes: {PhysicalShape}
+)
+	SpatialHash.clear(broadphase.discGrid)
+	SpatialHash.clear(broadphase.segmentGrid)
+	SpatialHash.clear(broadphase.shapeGrid)
+
+	for index, disc in ipairs(collisionDiscs) do
+		SpatialHash.insert(
+			broadphase.discGrid,
+			disc,
+			getCircleAABB(disc),
+			index
+		)
+	end
+
+	for index, segment in ipairs(collisionSegments) do
+		SpatialHash.insert(
+			broadphase.segmentGrid,
+			segment,
+			getSegmentAABB(segment),
+			index
+		)
+	end
+
+	for index, shape in ipairs(collisionShapes) do
+		SpatialHash.insert(
+			broadphase.shapeGrid,
+			shape,
+			getShapeAABB(shape),
+			index
+		)
+	end
+end
 
 -- Checagem de colisão por bitmask
 local function canCollide(a: any, b: any): boolean
@@ -425,7 +572,7 @@ end
 ----------------------------------------------------
 -- 6. STEP DA FÍSICA INTEGRADO
 ----------------------------------------------------
-function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, phys, fixedDt, currentTick)
+function function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, phys, fixedDt, currentTick)
 	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
 	for _, uId in ipairs(sortedUserIds) do
 		local pData = playersData[uId]
