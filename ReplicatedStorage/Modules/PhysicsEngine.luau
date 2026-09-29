@@ -756,18 +756,32 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 			local pA = playersData[uIdA]
 			if pA then
 				PhysicsEngine.resolveCircleCollision(pA, ball)
-				for _, disc in ipairs(collisionDiscs) do
-					PhysicsEngine.resolveCircleCollision(pA, disc)
+				
+				local playerAABB = getCircleAABB(pA)
+
+				local nearbyDiscs = SpatialHash.query(
+					broadphase.discGrid,
+					playerAABB
+				)
+
+				for _, entry in ipairs(nearbyDiscs) do
+					PhysicsEngine.resolveCircleCollision(
+						pA,
+						entry.object
+					)
 				end
+				
 				for idxB = idxA + 1, #sortedUserIds do
 					local pB = playersData[sortedUserIds[idxB]]
 					if pB then
 						PhysicsEngine.resolveCircleCollision(pA, pB)
 					end
 				end
+				
 				for _, seg in ipairs(collisionSegments) do
 					PhysicsEngine.resolveSegmentCollision(pA, seg)
 				end
+				
 				for _, shape in ipairs(collisionShapes) do
 					PhysicsEngine.resolveShapeCollision(pA, shape)
 				end
