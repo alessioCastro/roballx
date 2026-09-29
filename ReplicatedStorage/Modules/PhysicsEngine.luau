@@ -81,14 +81,16 @@ local function closestPointOnSegment(p: Vector2, a: Vector2, b: Vector2): Vector
 end
 
 local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
-	local rot = shape.rotation or 0
-	local w, h = shape.size.X, shape.size.Y
+	local w = shape.size.X
+	local h = shape.size.Y
 	local radius = math.min(w, h) / 2
 
 	local extentX = math.max(0, (w / 2) - radius)
 	local extentY = math.max(0, (h / 2) - radius)
 
-	local p1Local, p2Local
+	local p1Local: Vector2
+	local p2Local: Vector2
+
 	if extentX >= extentY then
 		p1Local = Vector2.new(-extentX, 0)
 		p2Local = Vector2.new(extentX, 0)
@@ -97,8 +99,25 @@ local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
 		p2Local = Vector2.new(0, extentY)
 	end
 
-	local p1World = shape.pos + rotateVector(p1Local, rot)
-	local p2World = shape.pos + rotateVector(p2Local, rot)
+	local rotation = shape.rotation or 0
+
+	if rotation == 0 then
+		return shape.pos + p1Local, shape.pos + p2Local, radius
+	end
+
+	local rad = math.rad(rotation)
+	local cos = math.cos(rad)
+	local sin = math.sin(rad)
+
+	local p1World = shape.pos + Vector2.new(
+		p1Local.X * cos - p1Local.Y * sin,
+		p1Local.X * sin + p1Local.Y * cos
+	)
+
+	local p2World = shape.pos + Vector2.new(
+		p2Local.X * cos - p2Local.Y * sin,
+		p2Local.X * sin + p2Local.Y * cos
+	)
 
 	return p1World, p2World, radius
 end
