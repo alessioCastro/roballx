@@ -167,7 +167,7 @@ if currentMap.shapes then
 			cornerPx = shape.cornerRadius
 		end
 
-		table.insert(shapes, {
+		local shapeObject: PhysicsEngine.PhysicalShape = {
 			id = shape.id or ("shape_" .. idx),
 			pos = shape.pos,
 			vel = Vector2.zero,
@@ -180,8 +180,15 @@ if currentMap.shapes then
 			isSolid = (shape.isSolid ~= false),
 			damping = shape.damping or 0.98,
 			cGroup = buildBitmask(shape.cGroup),
-			cMask = buildBitmask(shape.cMask)
-		})
+			cMask = buildBitmask(shape.cMask),
+
+			segmentP1 = Vector2.zero,
+			segmentP2 = Vector2.zero,
+			segmentRadius = 0,
+		}
+
+		PhysicsEngine.prepareShape(shapeObject)
+		shapes[#shapes + 1] = shapeObject
 	end
 end
 
