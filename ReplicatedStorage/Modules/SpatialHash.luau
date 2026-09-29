@@ -1,14 +1,6 @@
 --!strict
 -- SpatialHash.luau
 -- Broadphase determinística por grid espacial.
---
--- A grid não resolve colisões.
--- Ela apenas retorna candidatos potencialmente próximos.
---
--- IMPORTANTE:
--- Os objetos são armazenados com seu índice original.
--- Os resultados das consultas são ordenados por esse índice
--- para preservar uma ordem determinística de colisão.
 
 local SpatialHash = {}
 SpatialHash.__index = SpatialHash
@@ -25,6 +17,8 @@ export type Entry = {
 	index: number,
 	aabb: AABB,
 	cells: {string},
+	cellIndices: {[string]: number},
+	gridIndex: number,
 }
 
 export type Grid = {
@@ -32,10 +26,6 @@ export type Grid = {
 	cells: {[string]: {Entry}},
 	entries: {Entry},
 }
-
-----------------------------------------------------
--- CONSTRUÇÃO
-----------------------------------------------------
 
 function SpatialHash.new(cellSize: number): Grid
 	assert(cellSize > 0, "SpatialHash.cellSize precisa ser maior que zero")
@@ -47,10 +37,6 @@ function SpatialHash.new(cellSize: number): Grid
 	}
 end
 
-----------------------------------------------------
--- CHAVE DA CÉLULA
-----------------------------------------------------
-
 local function getCellCoordinate(value: number, cellSize: number): number
 	return math.floor(value / cellSize)
 end
@@ -58,10 +44,6 @@ end
 local function getCellKey(x: number, y: number): string
 	return tostring(x) .. ":" .. tostring(y)
 end
-
-----------------------------------------------------
--- INSERIR OBJETO
-----------------------------------------------------
 
 function SpatialHash.insert(
 	grid: Grid,
@@ -81,9 +63,11 @@ function SpatialHash.insert(
 		index = index,
 		aabb = aabb,
 		cells = {},
+		cellIndices = {},
+		gridIndex = #grid.entries + 1,
 	}
 
-	grid.entries[#grid.entries + 1] = entry
+	grid.entries[entry.gridIndex] = entry
 
 	for cellX = minCellX, maxCellX do
 		for cellY = minCellY, maxCellY do
@@ -96,8 +80,11 @@ function SpatialHash.insert(
 				grid.cells[key] = cell
 			end
 
-			cell[#cell + 1] = entry
+			local cellIndex = #cell + 1
+
+			cell[cellIndex] = entry
 			entry.cells[#entry.cells + 1] = key
+			entry.cellIndices[key] = cellIndex
 		end
 	end
 
@@ -112,11 +99,18 @@ function SpatialHash.remove(
 		local cell = grid.cells[key]
 
 		if cell then
-			for i = #cell, 1, -1 do
-				if cell[i] == entry then
-					table.remove(cell, i)
-					break
+			local cellIndex = entry.cellIndices[key]
+
+			if cellIndex then
+				local lastIndex = #cell
+				local lastEntry = cell[lastIndex]
+
+				if cellIndex ~= lastIndex then
+					cell[cellIndex] = lastEntry
+					lastEntry.cellIndices[key] = cellIndex
 				end
+
+				cell[lastIndex] = nil
 			end
 
 			if #cell == 0 then
@@ -125,14 +119,21 @@ function SpatialHash.remove(
 		end
 	end
 
-	for i = #grid.entries, 1, -1 do
-		if grid.entries[i] == entry then
-			table.remove(grid.entries, i)
-			break
-		end
+	local gridIndex = entry.gridIndex
+	local lastIndex = #grid.entries
+
+	if gridIndex ~= lastIndex then
+		local lastEntry = grid.entries[lastIndex]
+
+		grid.entries[gridIndex] = lastEntry
+		lastEntry.gridIndex = gridIndex
 	end
 
+	grid.entries[lastIndex] = nil
+
 	table.clear(entry.cells)
+	table.clear(entry.cellIndices)
+	entry.gridIndex = 0
 end
 
 function SpatialHash.update(
@@ -141,19 +142,21 @@ function SpatialHash.update(
 	aabb: AABB
 ): Entry
 
-	SpatialHash.remove(grid, entry)
+	local object = entry.object
+	local index = entry.index
+
+	SpatialHash.remove(
+		grid,
+		entry
+	)
 
 	return SpatialHash.insert(
 		grid,
-		entry.object,
+		object,
 		aabb,
-		entry.index
+		index
 	)
 end
-
-----------------------------------------------------
--- CONSULTAR AABB
-----------------------------------------------------
 
 function SpatialHash.query(
 	grid: Grid,
@@ -233,18 +236,10 @@ function SpatialHash.queryCombined(
 	return entries
 end
 
-----------------------------------------------------
--- LIMPAR
-----------------------------------------------------
-
 function SpatialHash.clear(grid: Grid)
 	table.clear(grid.cells)
 	table.clear(grid.entries)
 end
-
-----------------------------------------------------
--- RECONSTRUIR
-----------------------------------------------------
 
 function SpatialHash.rebuild(
 	grid: Grid,
