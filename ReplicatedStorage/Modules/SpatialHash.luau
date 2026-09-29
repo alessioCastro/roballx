@@ -105,7 +105,7 @@ end
 function SpatialHash.query(
 	grid: Grid,
 	aabb: AABB
-): {any}
+): {Entry}
 
 	local minCellX = getCellCoordinate(aabb.minX, grid.cellSize)
 	local maxCellX = getCellCoordinate(aabb.maxX, grid.cellSize)
@@ -138,13 +138,7 @@ function SpatialHash.query(
 		return a.index < b.index
 	end)
 
-	local objects = table.create(#entries)
-
-	for i, entry in ipairs(entries) do
-		objects[i] = entry.object
-	end
-
-	return objects
+	return entries
 end
 
 ----------------------------------------------------
