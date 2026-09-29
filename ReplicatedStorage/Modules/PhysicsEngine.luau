@@ -654,20 +654,19 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		playersData,
 		sortedUserIds
 	)
-	
-	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
+
+	----------------------------------------------------
+	-- MOVIMENTO DOS PLAYERS
+	----------------------------------------------------
+
 	for _, uId in ipairs(sortedUserIds) do
 		local pData = playersData[uId]
 
 		if pData then
-			-- Freio adicional explícito do Ballser.
-			-- É propositalmente separado do friction físico.
 			local decelFactor = phys.playerDecelFactor or 0.88
 
 			pData.vel *= decelFactor
 
-			-- Aplicação de força -> aceleração -> velocidade.
-			-- playerAccel representa aceleração na unidade interna do Roballx.
 			if pData.input and pData.input.Magnitude > 0 then
 				local mass = math.max(pData.mass, 0.000001)
 				local force = pData.input.Unit * (phys.playerAccel * mass)
@@ -676,20 +675,21 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				pData.vel += acceleration * fixedDt
 			end
 
-			-- Friction com a mesma semântica do Ballser:
-			-- v *= (1 - friction * dt)
 			local friction = math.clamp(phys.playerFriction or 1, 0, 1)
 			local frictionFactor = math.max(0, 1 - friction * fixedDt)
 
 			pData.vel *= frictionFactor
-
-			-- Integração da posição usando dt real.
 			pData.pos += pData.vel * fixedDt
 
 			if pData.isKicking then
-				PhysicsEngine.tryKick(pData, ball, phys, currentTick)
+				PhysicsEngine.tryKick(
+					pData,
+					ball,
+					phys,
+					currentTick
+				)
 			end
-			
+
 			local playerEntry = broadphase.playerEntries[pData]
 
 			if playerEntry then
@@ -712,6 +712,10 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 			end
 		end
 	end
+
+	----------------------------------------------------
+	-- MOVIMENTO DOS OBJETOS DINÂMICOS
+	----------------------------------------------------
 
 	for _, disc in ipairs(discs) do
 		if disc.isStatic == false then
@@ -736,13 +740,21 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 			shape.pos += shape.vel * fixedDt
 		end
 	end
-	
+
+	----------------------------------------------------
+	-- BROADPHASE APÓS MOVIMENTO
+	----------------------------------------------------
+
 	PhysicsEngine.rebuildBroadphase(
 		broadphase,
 		collisionDiscs,
 		collisionSegments,
 		collisionShapes
 	)
+
+	----------------------------------------------------
+	-- BOLA / SUBSTEPS
+	----------------------------------------------------
 
 	local steps = math.clamp(math.ceil(ball.vel.Magnitude / 6), 1, 4)
 	local subDt = fixedDt / steps
@@ -753,6 +765,10 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		ball.pos += ball.vel * subDt
 
 		for iter = 1, 2 do
+			------------------------------------------------
+			-- BOLA VS DISC
+			------------------------------------------------
+
 			local ballAABB = getCircleAABB(ball)
 
 			local nearbyDiscs = SpatialHash.queryCombined(
@@ -768,12 +784,9 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				)
 			end
 
-			PhysicsEngine.rebuildBroadphase(
-				broadphase,
-				collisionDiscs,
-				collisionSegments,
-				collisionShapes
-			)
+			------------------------------------------------
+			-- BOLA VS SEGMENT
+			------------------------------------------------
 
 			ballAABB = getCircleAABB(ball)
 
@@ -790,12 +803,9 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				)
 			end
 
-			PhysicsEngine.rebuildBroadphase(
-				broadphase,
-				collisionDiscs,
-				collisionSegments,
-				collisionShapes
-			)
+			------------------------------------------------
+			-- BOLA VS SHAPE
+			------------------------------------------------
 
 			ballAABB = getCircleAABB(ball)
 
@@ -811,6 +821,50 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					entry.object
 				)
 			end
+		end
+	end
+
+	----------------------------------------------------
+	-- RECONSTRUIR APÓS MOVIMENTO DA BOLA / COLISÕES
+	----------------------------------------------------
+
+	PhysicsEngine.rebuildBroadphase(
+		broadphase,
+		collisionDiscs,
+		collisionSegments,
+		collisionShapes
+	)
+
+	----------------------------------------------------
+	-- COLISÕES ENTRE OBJETOS
+	----------------------------------------------------
+
+	for iter = 1, 2 do
+
+		------------------------------------------------
+		-- SHAPE VS SHAPE
+		------------------------------------------------
+
+		for idxA, shapeA in ipairs(collisionShapes) do
+			local shapeAABB = getShapeAABB(shapeA)
+
+			local nearbyShapes = SpatialHash.queryCombined(
+				broadphase.staticShapeGrid,
+				broadphase.dynamicShapeGrid,
+				shapeAABB
+			)
+
+			for _, entry in ipairs(nearbyShapes) do
+				local shapeB = entry.object
+				local idxB = entry.index
+
+				if idxB > idxA then
+					PhysicsEngine.resolveShapeVsShapeCollision(
+						shapeA,
+						shapeB
+					)
+				end
+			end
 
 			PhysicsEngine.rebuildBroadphase(
 				broadphase,
@@ -819,65 +873,83 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				collisionShapes
 			)
 		end
-	end
 
-	for iter = 1, 2 do
-		for i = 1, #collisionShapes do
-			for j = i + 1, #collisionShapes do
-				PhysicsEngine.resolveShapeVsShapeCollision(
-					collisionShapes[i],
-					collisionShapes[j]
-				)
-			end
-		end
-
-		PhysicsEngine.rebuildBroadphase(
-			broadphase,
-			collisionDiscs,
-			collisionSegments,
-			collisionShapes
-		)
+		------------------------------------------------
+		-- SHAPE VS SEGMENT
+		------------------------------------------------
 
 		for _, shape in ipairs(collisionShapes) do
-			for _, seg in ipairs(collisionSegments) do
+			local shapeAABB = getShapeAABB(shape)
+
+			local nearbySegments = SpatialHash.queryCombined(
+				broadphase.staticSegmentGrid,
+				broadphase.dynamicSegmentGrid,
+				shapeAABB
+			)
+
+			for _, entry in ipairs(nearbySegments) do
 				PhysicsEngine.resolveShapeVsSegmentCollision(
 					shape,
-					seg
+					entry.object
 				)
 			end
+
+			PhysicsEngine.rebuildBroadphase(
+				broadphase,
+				collisionDiscs,
+				collisionSegments,
+				collisionShapes
+			)
 		end
 
-		PhysicsEngine.rebuildBroadphase(
-			broadphase,
-			collisionDiscs,
-			collisionSegments,
-			collisionShapes
-		)
+		------------------------------------------------
+		-- SHAPE VS DISC
+		------------------------------------------------
 
 		for _, shape in ipairs(collisionShapes) do
-			for _, disc in ipairs(collisionDiscs) do
+			local shapeAABB = getShapeAABB(shape)
+
+			local nearbyDiscs = SpatialHash.queryCombined(
+				broadphase.staticDiscGrid,
+				broadphase.dynamicDiscGrid,
+				shapeAABB
+			)
+
+			for _, entry in ipairs(nearbyDiscs) do
 				PhysicsEngine.resolveShapeCollision(
-					disc,
+					entry.object,
 					shape
 				)
 			end
+
+			PhysicsEngine.rebuildBroadphase(
+				broadphase,
+				collisionDiscs,
+				collisionSegments,
+				collisionShapes
+			)
 		end
 
-		PhysicsEngine.rebuildBroadphase(
-			broadphase,
-			collisionDiscs,
-			collisionSegments,
-			collisionShapes
-		)
+		------------------------------------------------
+		-- PLAYERS
+		------------------------------------------------
 
 		for idxA, uIdA in ipairs(sortedUserIds) do
 			local pA = playersData[uIdA]
 
 			if pA then
+				----------------------------------------
+				-- PLAYER VS BOLA
+				----------------------------------------
+
 				PhysicsEngine.resolveCircleCollision(
 					pA,
 					ball
 				)
+
+				----------------------------------------
+				-- PLAYER VS DISC
+				----------------------------------------
 
 				local playerAABB = getCircleAABB(pA)
 
@@ -893,6 +965,10 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						entry.object
 					)
 				end
+
+				----------------------------------------
+				-- PLAYER VS PLAYER
+				----------------------------------------
 
 				playerAABB = getCircleAABB(pA)
 
@@ -913,6 +989,10 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					end
 				end
 
+				----------------------------------------
+				-- PLAYER VS SEGMENT
+				----------------------------------------
+
 				playerAABB = getCircleAABB(pA)
 
 				local nearbySegments = SpatialHash.queryCombined(
@@ -928,6 +1008,10 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					)
 				end
 
+				----------------------------------------
+				-- PLAYER VS SHAPE
+				----------------------------------------
+
 				playerAABB = getCircleAABB(pA)
 
 				local nearbyShapes = SpatialHash.queryCombined(
@@ -942,8 +1026,26 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						entry.object
 					)
 				end
+
+				----------------------------------------
+				-- ATUALIZAR PLAYER NO GRID
+				----------------------------------------
+
+				local playerEntry = broadphase.playerEntries[pA]
+
+				if playerEntry then
+					broadphase.playerEntries[pA] = SpatialHash.update(
+						broadphase.playerGrid,
+						playerEntry,
+						getCircleAABB(pA)
+					)
+				end
 			end
 		end
+
+		------------------------------------------------
+		-- DISC VS SEGMENT
+		------------------------------------------------
 
 		for _, disc in ipairs(discs) do
 			if disc.isStatic == false then
@@ -963,6 +1065,17 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				end
 			end
 		end
+
+		------------------------------------------------
+		-- OBJETOS DINÂMICOS PODEM TER SIDO MOVIDOS
+		------------------------------------------------
+
+		PhysicsEngine.rebuildBroadphase(
+			broadphase,
+			collisionDiscs,
+			collisionSegments,
+			collisionShapes
+		)
 	end
 end
 
