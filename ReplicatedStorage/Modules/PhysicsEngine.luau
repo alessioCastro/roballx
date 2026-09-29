@@ -698,6 +698,13 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					entry.object
 				)
 			end
+			
+			PhysicsEngine.rebuildBroadphase(
+				broadphase,
+				collisionDiscs,
+				collisionSegments,
+				collisionShapes
+			)
 
 			ballAABB = getCircleAABB(ball)
 
@@ -712,6 +719,13 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					entry.object
 				)
 			end
+			
+			PhysicsEngine.rebuildBroadphase(
+				broadphase,
+				collisionDiscs,
+				collisionSegments,
+				collisionShapes
+			)
 
 			ballAABB = getCircleAABB(ball)
 
@@ -726,6 +740,13 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					entry.object
 				)
 			end
+			
+			PhysicsEngine.rebuildBroadphase(
+				broadphase,
+				collisionDiscs,
+				collisionSegments,
+				collisionShapes
+			)
 		end
 	end
 
@@ -744,18 +765,51 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				)
 			end
 		end
+		
+		PhysicsEngine.rebuildBroadphase(
+			broadphase,
+			collisionDiscs,
+			collisionSegments,
+			collisionShapes
+		)
+		
+		PhysicsEngine.rebuildPlayerBroadphase(
+			broadphase,
+			playersData,
+			sortedUserIds
+		)
 
 		for _, shape in ipairs(collisionShapes) do
 			for _, seg in ipairs(collisionSegments) do
 				PhysicsEngine.resolveShapeVsSegmentCollision(shape, seg)
 			end
 		end
+		
+		PhysicsEngine.rebuildBroadphase(
+			broadphase,
+			collisionDiscs,
+			collisionSegments,
+			collisionShapes
+		)
 
 		for _, shape in ipairs(collisionShapes) do
 			for _, disc in ipairs(collisionDiscs) do
 				PhysicsEngine.resolveShapeCollision(disc, shape)
 			end
 		end
+		
+		PhysicsEngine.rebuildBroadphase(
+			broadphase,
+			collisionDiscs,
+			collisionSegments,
+			collisionShapes
+		)
+		
+		PhysicsEngine.rebuildPlayerBroadphase(
+			broadphase,
+			playersData,
+			sortedUserIds
+		)
 
 		-- Iteração determinística usando sortedUserIds
 		for idxA, uIdA in ipairs(sortedUserIds) do
