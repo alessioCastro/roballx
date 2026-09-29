@@ -64,10 +64,12 @@ export type Broadphase = {
 	discGrid: SpatialHash.Grid,
 	segmentGrid: SpatialHash.Grid,
 	shapeGrid: SpatialHash.Grid,
+	playerGrid: SpatialHash.Grid,
 
 	discIndex: {[any]: number},
 	segmentIndex: {[any]: number},
 	shapeIndex: {[any]: number},
+	playerIndex: {[any]: number},
 }
 
 ----------------------------------------------------
@@ -125,10 +127,12 @@ function PhysicsEngine.createBroadphase(
 		discGrid = SpatialHash.new(cellSize),
 		segmentGrid = SpatialHash.new(cellSize),
 		shapeGrid = SpatialHash.new(cellSize),
+		playerGrid = SpatialHash.new(cellSize),
 
 		discIndex = {},
 		segmentIndex = {},
 		shapeIndex = {},
+		playerIndex = {},
 	}
 
 	for index, disc in ipairs(collisionDiscs) do
@@ -202,6 +206,31 @@ function PhysicsEngine.rebuildBroadphase(
 			getShapeAABB(shape),
 			index
 		)
+	end
+end
+
+function PhysicsEngine.rebuildPlayerBroadphase(
+	broadphase: Broadphase,
+	playersData,
+	sortedUserIds
+)
+	SpatialHash.clear(broadphase.playerGrid)
+
+	table.clear(broadphase.playerIndex)
+
+	for index, userId in ipairs(sortedUserIds) do
+		local player = playersData[userId]
+
+		if player then
+			broadphase.playerIndex[player] = index
+
+			SpatialHash.insert(
+				broadphase.playerGrid,
+				player,
+				getCircleAABB(player),
+				index
+			)
+		end
 	end
 end
 
