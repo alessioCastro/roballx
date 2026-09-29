@@ -601,7 +601,7 @@ end
 ----------------------------------------------------
 -- 6. STEP DA FÍSICA INTEGRADO
 ----------------------------------------------------
-function function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, phys, fixedDt, currentTick)
+function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, phys, fixedDt, currentTick)
 	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
 	for _, uId in ipairs(sortedUserIds) do
 		local pData = playersData[uId]
@@ -638,6 +638,12 @@ function function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, se
 			end
 		end
 	end
+	
+	PhysicsEngine.rebuildPlayerBroadphase(
+		broadphase,
+		playersData,
+		sortedUserIds
+	)
 
 	for _, disc in ipairs(discs) do
 		if disc.isStatic == false then
@@ -662,6 +668,13 @@ function function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, se
 			shape.pos += shape.vel * fixedDt
 		end
 	end
+	
+	PhysicsEngine.rebuildBroadphase(
+		broadphase,
+		collisionDiscs,
+		collisionSegments,
+		collisionShapes
+	)
 
 	local steps = math.clamp(math.ceil(ball.vel.Magnitude / 6), 1, 4)
 	local subDt = fixedDt / steps
