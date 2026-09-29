@@ -24,6 +24,7 @@ export type Entry = {
 	object: any,
 	index: number,
 	aabb: AABB,
+	cells: {string},
 }
 
 export type Grid = {
@@ -67,7 +68,8 @@ function SpatialHash.insert(
 	object: any,
 	aabb: AABB,
 	index: number
-)
+): Entry
+
 	local minCellX = getCellCoordinate(aabb.minX, grid.cellSize)
 	local maxCellX = getCellCoordinate(aabb.maxX, grid.cellSize)
 
@@ -78,6 +80,7 @@ function SpatialHash.insert(
 		object = object,
 		index = index,
 		aabb = aabb,
+		cells = {},
 	}
 
 	grid.entries[#grid.entries + 1] = entry
@@ -94,8 +97,58 @@ function SpatialHash.insert(
 			end
 
 			cell[#cell + 1] = entry
+			entry.cells[#entry.cells + 1] = key
 		end
 	end
+
+	return entry
+end
+
+function SpatialHash.remove(
+	grid: Grid,
+	entry: Entry
+)
+	for _, key in ipairs(entry.cells) do
+		local cell = grid.cells[key]
+
+		if cell then
+			for i = #cell, 1, -1 do
+				if cell[i] == entry then
+					table.remove(cell, i)
+					break
+				end
+			end
+
+			if #cell == 0 then
+				grid.cells[key] = nil
+			end
+		end
+	end
+
+	for i = #grid.entries, 1, -1 do
+		if grid.entries[i] == entry then
+			table.remove(grid.entries, i)
+			break
+		end
+	end
+
+	table.clear(entry.cells)
+end
+
+function SpatialHash.update(
+	grid: Grid,
+	entry: Entry,
+	aabb: AABB
+): Entry
+
+	SpatialHash.remove(grid, entry)
+
+	return SpatialHash.insert(
+		grid,
+		entry.object,
+		aabb,
+		entry.index
+	)
 end
 
 ----------------------------------------------------
