@@ -305,6 +305,13 @@ for _, s in ipairs(shapes) do
 	end
 end
 
+local broadphase = PhysicsEngine.createBroadphase(
+	collisionDiscs,
+	collisionSegments,
+	collisionShapes,
+	64
+)
+
 ----------------------------------------------------
 -- ESTADO DE REDE
 ----------------------------------------------------
@@ -610,6 +617,7 @@ gameSnapshotEvent.OnClientEvent:Connect(function(packed)
 				collisionDiscs,
 				collisionSegments,
 				collisionShapes,
+				broadphase,
 				phys,
 				FIXED_DT,
 				replayTick
@@ -681,9 +689,10 @@ RunService.Heartbeat:Connect(function(dt)
 			collisionDiscs,
 			collisionSegments,
 			collisionShapes,
+			broadphase,
 			phys,
 			FIXED_DT,
-			localTick
+			curreTick
 		)
 
 		localCheckGoals()
