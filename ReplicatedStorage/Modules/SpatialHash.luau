@@ -194,6 +194,45 @@ function SpatialHash.query(
 	return entries
 end
 
+function SpatialHash.queryCombined(
+	staticGrid: Grid,
+	dynamicGrid: Grid,
+	aabb: AABB
+): {Entry}
+
+	local found: {[any]: Entry} = {}
+
+	local staticEntries = SpatialHash.query(
+		staticGrid,
+		aabb
+	)
+
+	for _, entry in ipairs(staticEntries) do
+		found[entry.object] = entry
+	end
+
+	local dynamicEntries = SpatialHash.query(
+		dynamicGrid,
+		aabb
+	)
+
+	for _, entry in ipairs(dynamicEntries) do
+		found[entry.object] = entry
+	end
+
+	local entries = {}
+
+	for _, entry in pairs(found) do
+		entries[#entries + 1] = entry
+	end
+
+	table.sort(entries, function(a, b)
+		return a.index < b.index
+	end)
+
+	return entries
+end
+
 ----------------------------------------------------
 -- LIMPAR
 ----------------------------------------------------
