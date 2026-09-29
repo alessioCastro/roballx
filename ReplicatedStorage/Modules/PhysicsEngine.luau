@@ -51,7 +51,11 @@ export type PhysicalShape = {
 	isSolid: boolean?,
 	damping: number?,
 	cGroup: number?,
-	cMask: number?
+	cMask: number?,
+
+	segmentP1: Vector2,
+	segmentP2: Vector2,
+	segmentRadius: number,
 }
 
 -- Checagem de colisão por bitmask
@@ -72,17 +76,10 @@ local function rotateVector(v: Vector2, angleDegrees: number): Vector2
 	return Vector2.new(v.X * cos - v.Y * sin, v.X * sin + v.Y * cos)
 end
 
-local function closestPointOnSegment(p: Vector2, a: Vector2, b: Vector2): Vector2
-	local ab = b - a
-	local ab2 = ab:Dot(ab)
-	if ab2 == 0 then return a end
-	local t = math.clamp((p - a):Dot(ab) / ab2, 0, 1)
-	return a + ab * t
-end
-
-local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
+function PhysicsEngine.prepareShape(shape: PhysicalShape)
 	local w = shape.size.X
 	local h = shape.size.Y
+
 	local radius = math.min(w, h) / 2
 
 	local extentX = math.max(0, (w / 2) - radius)
@@ -101,25 +98,21 @@ local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
 
 	local rotation = shape.rotation or 0
 
-	if rotation == 0 then
-		return shape.pos + p1Local, shape.pos + p2Local, radius
-	end
+	shape.segmentP1 = rotateVector(p1Local, rotation)
+	shape.segmentP2 = rotateVector(p2Local, rotation)
+	shape.segmentRadius = radius
+end
 
-	local rad = math.rad(rotation)
-	local cos = math.cos(rad)
-	local sin = math.sin(rad)
+local function closestPointOnSegment(p: Vector2, a: Vector2, b: Vector2): Vector2
+	local ab = b - a
+	local ab2 = ab:Dot(ab)
+	if ab2 == 0 then return a end
+	local t = math.clamp((p - a):Dot(ab) / ab2, 0, 1)
+	return a + ab * t
+end
 
-	local p1World = shape.pos + Vector2.new(
-		p1Local.X * cos - p1Local.Y * sin,
-		p1Local.X * sin + p1Local.Y * cos
-	)
-
-	local p2World = shape.pos + Vector2.new(
-		p2Local.X * cos - p2Local.Y * sin,
-		p2Local.X * sin + p2Local.Y * cos
-	)
-
-	return p1World, p2World, radius
+local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
+	return shape.pos + shape.segmentP1, shape.pos + shape.segmentP2, shape.segmentRadius
 end
 
 local function getClosestPointsBetweenSegments(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2): (Vector2, Vector2, number)
