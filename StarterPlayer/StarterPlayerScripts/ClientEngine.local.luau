@@ -692,7 +692,7 @@ RunService.Heartbeat:Connect(function(dt)
 			broadphase,
 			phys,
 			FIXED_DT,
-			curreTick
+			localTick
 		)
 
 		localCheckGoals()
