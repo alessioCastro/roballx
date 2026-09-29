@@ -257,12 +257,6 @@ function PhysicsEngine.rebuildPlayerBroadphase(
 
 			if entry then
 				entry.index = index
-
-				broadphase.playerEntries[player] = SpatialHash.update(
-					broadphase.playerGrid,
-					entry,
-					getCircleAABB(player)
-				)
 			else
 				broadphase.playerEntries[player] = SpatialHash.insert(
 					broadphase.playerGrid,
@@ -655,13 +649,11 @@ end
 -- 6. STEP DA FÍSICA INTEGRADO
 ----------------------------------------------------
 function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, phys, fixedDt, currentTick)
-	if next(broadphase.playerEntries) == nil then
-		PhysicsEngine.rebuildPlayerBroadphase(
-			broadphase,
-			playersData,
-			sortedUserIds
-		)
-	end
+	PhysicsEngine.rebuildPlayerBroadphase(
+		broadphase,
+		playersData,
+		sortedUserIds
+	)
 	
 	-- Iteração em ordem determinística (sortedUserIds em vez de pairs())
 	for _, uId in ipairs(sortedUserIds) do
