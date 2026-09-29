@@ -68,13 +68,18 @@ export type Broadphase = {
 	dynamicDiscGrid: SpatialHash.Grid,
 	dynamicSegmentGrid: SpatialHash.Grid,
 	dynamicShapeGrid: SpatialHash.Grid,
-	
+
 	playerGrid: SpatialHash.Grid,
 
 	discIndex: {[any]: number},
 	segmentIndex: {[any]: number},
 	shapeIndex: {[any]: number},
 	playerIndex: {[any]: number},
+
+	dynamicDiscEntries: {[any]: SpatialHash.Entry},
+	dynamicSegmentEntries: {[any]: SpatialHash.Entry},
+	dynamicShapeEntries: {[any]: SpatialHash.Entry},
+
 	playerEntries: {[any]: SpatialHash.Entry},
 }
 
@@ -144,6 +149,11 @@ function PhysicsEngine.createBroadphase(
 		segmentIndex = {},
 		shapeIndex = {},
 		playerIndex = {},
+
+		dynamicDiscEntries = {},
+		dynamicSegmentEntries = {},
+		dynamicShapeEntries = {},
+
 		playerEntries = {},
 	}
 
@@ -154,12 +164,16 @@ function PhysicsEngine.createBroadphase(
 			and broadphase.staticDiscGrid
 			or broadphase.dynamicDiscGrid
 
-		SpatialHash.insert(
+		local entry = SpatialHash.insert(
 			grid,
 			disc,
 			getCircleAABB(disc),
 			index
 		)
+
+		if disc.isStatic ~= true then
+			broadphase.dynamicDiscEntries[disc] = entry
+		end
 	end
 
 	for index, segment in ipairs(collisionSegments) do
@@ -169,12 +183,16 @@ function PhysicsEngine.createBroadphase(
 			and broadphase.staticSegmentGrid
 			or broadphase.dynamicSegmentGrid
 
-		SpatialHash.insert(
+		local entry = SpatialHash.insert(
 			grid,
 			segment,
 			getSegmentAABB(segment),
 			index
 		)
+
+		if segment.isStatic ~= true then
+			broadphase.dynamicSegmentEntries[segment] = entry
+		end
 	end
 
 	for index, shape in ipairs(collisionShapes) do
@@ -184,12 +202,16 @@ function PhysicsEngine.createBroadphase(
 			and broadphase.staticShapeGrid
 			or broadphase.dynamicShapeGrid
 
-		SpatialHash.insert(
+		local entry = SpatialHash.insert(
 			grid,
 			shape,
 			getShapeAABB(shape),
 			index
 		)
+
+		if shape.isStatic ~= true then
+			broadphase.dynamicShapeEntries[shape] = entry
+		end
 	end
 
 	return broadphase
@@ -205,9 +227,13 @@ function PhysicsEngine.rebuildBroadphase(
 	SpatialHash.clear(broadphase.dynamicSegmentGrid)
 	SpatialHash.clear(broadphase.dynamicShapeGrid)
 
+	table.clear(broadphase.dynamicDiscEntries)
+	table.clear(broadphase.dynamicSegmentEntries)
+	table.clear(broadphase.dynamicShapeEntries)
+
 	for index, disc in ipairs(collisionDiscs) do
 		if disc.isStatic ~= true then
-			SpatialHash.insert(
+			broadphase.dynamicDiscEntries[disc] = SpatialHash.insert(
 				broadphase.dynamicDiscGrid,
 				disc,
 				getCircleAABB(disc),
@@ -218,7 +244,7 @@ function PhysicsEngine.rebuildBroadphase(
 
 	for index, segment in ipairs(collisionSegments) do
 		if segment.isStatic ~= true then
-			SpatialHash.insert(
+			broadphase.dynamicSegmentEntries[segment] = SpatialHash.insert(
 				broadphase.dynamicSegmentGrid,
 				segment,
 				getSegmentAABB(segment),
@@ -229,7 +255,7 @@ function PhysicsEngine.rebuildBroadphase(
 
 	for index, shape in ipairs(collisionShapes) do
 		if shape.isStatic ~= true then
-			SpatialHash.insert(
+			broadphase.dynamicShapeEntries[shape] = SpatialHash.insert(
 				broadphase.dynamicShapeGrid,
 				shape,
 				getShapeAABB(shape),
@@ -645,6 +671,66 @@ function PhysicsEngine.tryKick(pData: CircleObject, ball: CircleObject, phys: an
 	end
 end
 
+local function updateDiscBroadphase(
+	broadphase: Broadphase,
+	disc: CircleObject
+)
+	local entry = broadphase.dynamicDiscEntries[disc]
+
+	if entry then
+		broadphase.dynamicDiscEntries[disc] = SpatialHash.update(
+			broadphase.dynamicDiscGrid,
+			entry,
+			getCircleAABB(disc)
+		)
+	end
+end
+
+local function updateSegmentBroadphase(
+	broadphase: Broadphase,
+	segment: Segment
+)
+	local entry = broadphase.dynamicSegmentEntries[segment]
+
+	if entry then
+		broadphase.dynamicSegmentEntries[segment] = SpatialHash.update(
+			broadphase.dynamicSegmentGrid,
+			entry,
+			getSegmentAABB(segment)
+		)
+	end
+end
+
+local function updateShapeBroadphase(
+	broadphase: Broadphase,
+	shape: PhysicalShape
+)
+	local entry = broadphase.dynamicShapeEntries[shape]
+
+	if entry then
+		broadphase.dynamicShapeEntries[shape] = SpatialHash.update(
+			broadphase.dynamicShapeGrid,
+			entry,
+			getShapeAABB(shape)
+		)
+	end
+end
+
+local function updatePlayerBroadphase(
+	broadphase: Broadphase,
+	player: CircleObject
+)
+	local entry = broadphase.playerEntries[player]
+
+	if entry then
+		broadphase.playerEntries[player] = SpatialHash.update(
+			broadphase.playerGrid,
+			entry,
+			getCircleAABB(player)
+		)
+	end
+end
+
 ----------------------------------------------------
 -- 6. STEP DA FÍSICA INTEGRADO
 ----------------------------------------------------
@@ -675,8 +761,16 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				pData.vel += acceleration * fixedDt
 			end
 
-			local friction = math.clamp(phys.playerFriction or 1, 0, 1)
-			local frictionFactor = math.max(0, 1 - friction * fixedDt)
+			local friction = math.clamp(
+				phys.playerFriction or 1,
+				0,
+				1
+			)
+
+			local frictionFactor = math.max(
+				0,
+				1 - friction * fixedDt
+			)
 
 			pData.vel *= frictionFactor
 			pData.pos += pData.vel * fixedDt
@@ -690,26 +784,10 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				)
 			end
 
-			local playerEntry = broadphase.playerEntries[pData]
-
-			if playerEntry then
-				broadphase.playerEntries[pData] = SpatialHash.update(
-					broadphase.playerGrid,
-					playerEntry,
-					getCircleAABB(pData)
-				)
-			else
-				local playerIndex = broadphase.playerIndex[pData]
-
-				if playerIndex then
-					broadphase.playerEntries[pData] = SpatialHash.insert(
-						broadphase.playerGrid,
-						pData,
-						getCircleAABB(pData),
-						playerIndex
-					)
-				end
-			end
+			updatePlayerBroadphase(
+				broadphase,
+				pData
+			)
 		end
 	end
 
@@ -742,7 +820,7 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 	end
 
 	----------------------------------------------------
-	-- BROADPHASE APÓS MOVIMENTO
+	-- UM ÚNICO REBUILD NO INÍCIO DO TICK
 	----------------------------------------------------
 
 	PhysicsEngine.rebuildBroadphase(
@@ -756,15 +834,23 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 	-- BOLA / SUBSTEPS
 	----------------------------------------------------
 
-	local steps = math.clamp(math.ceil(ball.vel.Magnitude / 6), 1, 4)
+	local steps = math.clamp(
+		math.ceil(ball.vel.Magnitude / 6),
+		1,
+		4
+	)
+
 	local subDt = fixedDt / steps
-	local dampingFactor = math.pow(phys.ballDamping, 1 / steps)
+	local dampingFactor = math.pow(
+		phys.ballDamping,
+		1 / steps
+	)
 
 	for _ = 1, steps do
 		ball.vel *= dampingFactor
 		ball.pos += ball.vel * subDt
 
-		for iter = 1, 2 do
+		for _ = 1, 2 do
 			------------------------------------------------
 			-- BOLA VS DISC
 			------------------------------------------------
@@ -820,27 +906,20 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					ball,
 					entry.object
 				)
+
+				updateShapeBroadphase(
+					broadphase,
+					entry.object
+				)
 			end
 		end
 	end
 
 	----------------------------------------------------
-	-- RECONSTRUIR APÓS MOVIMENTO DA BOLA / COLISÕES
+	-- SHAPES / SEGMENTS / DISCS
 	----------------------------------------------------
 
-	PhysicsEngine.rebuildBroadphase(
-		broadphase,
-		collisionDiscs,
-		collisionSegments,
-		collisionShapes
-	)
-
-	----------------------------------------------------
-	-- COLISÕES ENTRE OBJETOS
-	----------------------------------------------------
-
-	for iter = 1, 2 do
-
+	for _ = 1, 2 do
 		------------------------------------------------
 		-- SHAPE VS SHAPE
 		------------------------------------------------
@@ -863,15 +942,18 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						shapeA,
 						shapeB
 					)
+
+					updateShapeBroadphase(
+						broadphase,
+						shapeA
+					)
+
+					updateShapeBroadphase(
+						broadphase,
+						shapeB
+					)
 				end
 			end
-
-			PhysicsEngine.rebuildBroadphase(
-				broadphase,
-				collisionDiscs,
-				collisionSegments,
-				collisionShapes
-			)
 		end
 
 		------------------------------------------------
@@ -888,18 +970,23 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 			)
 
 			for _, entry in ipairs(nearbySegments) do
+				local segment = entry.object
+
 				PhysicsEngine.resolveShapeVsSegmentCollision(
 					shape,
-					entry.object
+					segment
+				)
+
+				updateShapeBroadphase(
+					broadphase,
+					shape
+				)
+
+				updateSegmentBroadphase(
+					broadphase,
+					segment
 				)
 			end
-
-			PhysicsEngine.rebuildBroadphase(
-				broadphase,
-				collisionDiscs,
-				collisionSegments,
-				collisionShapes
-			)
 		end
 
 		------------------------------------------------
@@ -916,18 +1003,23 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 			)
 
 			for _, entry in ipairs(nearbyDiscs) do
+				local disc = entry.object
+
 				PhysicsEngine.resolveShapeCollision(
-					entry.object,
+					disc,
+					shape
+				)
+
+				updateDiscBroadphase(
+					broadphase,
+					disc
+				)
+
+				updateShapeBroadphase(
+					broadphase,
 					shape
 				)
 			end
-
-			PhysicsEngine.rebuildBroadphase(
-				broadphase,
-				collisionDiscs,
-				collisionSegments,
-				collisionShapes
-			)
 		end
 
 		------------------------------------------------
@@ -947,6 +1039,11 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 					ball
 				)
 
+				updatePlayerBroadphase(
+					broadphase,
+					pA
+				)
+
 				----------------------------------------
 				-- PLAYER VS DISC
 				----------------------------------------
@@ -960,10 +1057,24 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				)
 
 				for _, entry in ipairs(nearbyDiscs) do
+					local disc = entry.object
+
 					PhysicsEngine.resolveCircleCollision(
 						pA,
-						entry.object
+						disc
 					)
+
+					updatePlayerBroadphase(
+						broadphase,
+						pA
+					)
+
+					updateDiscBroadphase(
+						broadphase,
+						disc
+					)
+
+					playerAABB = getCircleAABB(pA)
 				end
 
 				----------------------------------------
@@ -986,6 +1097,18 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 							pA,
 							pB
 						)
+
+						updatePlayerBroadphase(
+							broadphase,
+							pA
+						)
+
+						updatePlayerBroadphase(
+							broadphase,
+							pB
+						)
+
+						playerAABB = getCircleAABB(pA)
 					end
 				end
 
@@ -1006,6 +1129,13 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						pA,
 						entry.object
 					)
+
+					updatePlayerBroadphase(
+						broadphase,
+						pA
+					)
+
+					playerAABB = getCircleAABB(pA)
 				end
 
 				----------------------------------------
@@ -1021,24 +1151,24 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				)
 
 				for _, entry in ipairs(nearbyShapes) do
+					local shape = entry.object
+
 					PhysicsEngine.resolveShapeCollision(
 						pA,
-						entry.object
+						shape
 					)
-				end
 
-				----------------------------------------
-				-- ATUALIZAR PLAYER NO GRID
-				----------------------------------------
-
-				local playerEntry = broadphase.playerEntries[pA]
-
-				if playerEntry then
-					broadphase.playerEntries[pA] = SpatialHash.update(
-						broadphase.playerGrid,
-						playerEntry,
-						getCircleAABB(pA)
+					updatePlayerBroadphase(
+						broadphase,
+						pA
 					)
+
+					updateShapeBroadphase(
+						broadphase,
+						shape
+					)
+
+					playerAABB = getCircleAABB(pA)
 				end
 			end
 		end
@@ -1062,20 +1192,16 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						disc,
 						entry.object
 					)
+
+					updateDiscBroadphase(
+						broadphase,
+						disc
+					)
+
+					discAABB = getCircleAABB(disc)
 				end
 			end
 		end
-
-		------------------------------------------------
-		-- OBJETOS DINÂMICOS PODEM TER SIDO MOVIDOS
-		------------------------------------------------
-
-		PhysicsEngine.rebuildBroadphase(
-			broadphase,
-			collisionDiscs,
-			collisionSegments,
-			collisionShapes
-		)
 	end
 end
 
