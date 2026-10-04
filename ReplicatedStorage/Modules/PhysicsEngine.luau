@@ -936,7 +936,7 @@ function PhysicsEngine.tryKick(
 )
 	local kickCooldownTicks =
 		math.ceil(
-			phys.kickCooldown * 60
+			phys.cooldown * 60
 		)
 
 	if currentTick - (pData.lastKickTick or -9999)
@@ -947,15 +947,20 @@ function PhysicsEngine.tryKick(
 
 	for _, object in ipairs(kickableObjects) do
 		if object.isStatic ~= true then
-			local delta = object.pos - pData.pos
-			local dist = delta.Magnitude
+			local delta =
+				object.pos - pData.pos
+
+			local dist =
+				delta.Magnitude
 
 			if dist <= (
 				pData.radius
 					+ object.radius
-					+ phys.kickRangeExtra
+					+ phys.rangeExtra
 				) then
-				pData.lastKickTick = currentTick
+
+				pData.lastKickTick =
+					currentTick
 
 				local kickDir =
 					dist > 0
@@ -963,7 +968,7 @@ function PhysicsEngine.tryKick(
 					or Vector2.new(1, 0)
 
 				object.vel +=
-					kickDir * phys.kickForce
+					kickDir * phys.force
 			end
 		end
 	end
@@ -1075,7 +1080,7 @@ function PhysicsEngine.Step(
 
 		if pData then
 			local decelFactor =
-				phys.playerDecelFactor or 0.88
+				phys.decelFactor or 0.88
 
 			pData.vel *= decelFactor
 
@@ -1090,7 +1095,7 @@ function PhysicsEngine.Step(
 
 				local force =
 					pData.input.Unit
-					* (phys.playerAccel * mass)
+					* (phys.accel * mass)
 
 				local acceleration =
 					force / mass
@@ -1101,7 +1106,7 @@ function PhysicsEngine.Step(
 
 			local friction =
 				math.clamp(
-					phys.playerFriction or 1,
+					phys.friction or 1,
 					0,
 					1
 				)
