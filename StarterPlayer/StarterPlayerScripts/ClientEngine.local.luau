@@ -9,40 +9,35 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local replicatedModules = ReplicatedStorage:WaitForChild("Modules")
+local replicatedModules =
+	ReplicatedStorage:WaitForChild("Modules")
+
 local replicatedGameRemotes =
 	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
 
-local MapData = require(
-	replicatedModules:WaitForChild("MapData")
-)
+local MapData =
+	require(replicatedModules:WaitForChild("MapData"))
 
-local PhysicsEngine = require(
-	replicatedModules:WaitForChild("PhysicsEngine")
-)
+local PhysicsEngine =
+	require(replicatedModules:WaitForChild("PhysicsEngine"))
 
-local GameState = require(
-	replicatedModules:WaitForChild("GameState")
-)
+local GameState =
+	require(replicatedModules:WaitForChild("GameState"))
 
-local InputBuffer = require(
-	replicatedModules:WaitForChild("InputBuffer")
-)
+local InputBuffer =
+	require(replicatedModules:WaitForChild("InputBuffer"))
 
 local Renderers =
 	replicatedModules:WaitForChild("Renderers")
 
-local UIPrimitives = require(
-	Renderers:WaitForChild("UIPrimitives")
-)
+local UIPrimitives =
+	require(Renderers:WaitForChild("UIPrimitives"))
 
-local MapRenderer = require(
-	Renderers:WaitForChild("MapRenderer")
-)
+local MapRenderer =
+	require(Renderers:WaitForChild("MapRenderer"))
 
-local HUDRenderer = require(
-	Renderers:WaitForChild("HUDRenderer")
-)
+local HUDRenderer =
+	require(Renderers:WaitForChild("HUDRenderer"))
 
 ----------------------------------------------------
 -- SERVIDOR RESERVADO
@@ -66,8 +61,11 @@ end
 -- REFERÊNCIAS
 ----------------------------------------------------
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local player =
+	Players.LocalPlayer
+
+local playerGui =
+	player:WaitForChild("PlayerGui")
 
 local gameInputEvent =
 	replicatedGameRemotes:WaitForChild("GameInput")
@@ -78,18 +76,23 @@ local gameSnapshotEvent =
 local inputFolder =
 	replicatedModules:WaitForChild("Inputs")
 
-local currentMap = MapData.Default
+local currentMap =
+	MapData.Default
 
-local playerPhys =
+local playerGameplay =
 	currentMap.gameplay.player
+
+local playerObjectId =
+	playerGameplay.object
 
 ----------------------------------------------------
 -- BITMASK
 ----------------------------------------------------
 
-local DEFAULT_MASK = 0xFFFFFFFF
+local DEFAULT_MASK =
+	0xFFFFFFFF
 
-local groupMap: { [string]: number } = {}
+local groupMap: {[string]: number} = {}
 
 if currentMap.groups then
 	for idx, groupName in ipairs(currentMap.groups) do
@@ -117,7 +120,8 @@ local function buildBitmask(
 
 	if typeof(list) == "table" then
 		for _, name in ipairs(list) do
-			local bitIndex = groupMap[name]
+			local bitIndex =
+				groupMap[name]
 
 			if bitIndex then
 				mask = bit32.bor(
@@ -139,28 +143,42 @@ end
 ----------------------------------------------------
 
 local function processSegments(
-	rawSegments: { any }
-): { PhysicsEngine.Segment }
+	rawSegments: {any}
+): {PhysicsEngine.Segment}
 
-	local processed = {}
+	local processed:
+		{PhysicsEngine.Segment} = {}
 
 	if not rawSegments then
 		return processed
 	end
 
 	for idx, seg in ipairs(rawSegments) do
-		local curve = seg.curve or 0
+
+		------------------------------------------------
+		-- O OBJETO USADO COMO PLAYER É APENAS MOLDE.
+		------------------------------------------------
+
+		if seg.id == playerObjectId then
+			continue
+		end
+
+		local curve =
+			seg.curve or 0
 
 		if curve == 0 then
 			processed[#processed + 1] = {
-				id = seg.id or ("seg_" .. idx),
+				id =
+					seg.id
+					or ("seg_" .. idx),
 
 				a = seg.a,
 				b = seg.b,
 
 				vel = Vector2.zero,
 
-				mass = seg.mass or 1,
+				mass =
+					seg.mass or 1,
 
 				restitution =
 					seg.restitution or 0.5,
@@ -177,11 +195,21 @@ local function processSegments(
 				thickness =
 					seg.thickness,
 
+				ignoreCapA =
+					seg.ignoreCapA,
+
+				ignoreCapB =
+					seg.ignoreCapB,
+
 				cGroup =
-					buildBitmask(seg.cGroup),
+					buildBitmask(
+						seg.cGroup
+					),
 
 				cMask =
-					buildBitmask(seg.cMask)
+					buildBitmask(
+						seg.cMask
+					)
 			}
 		else
 			local samples =
@@ -225,10 +253,14 @@ local function processSegments(
 						.. "_"
 						.. i,
 
-					a = prevPoint,
-					b = currentPoint,
+					a =
+						prevPoint,
 
-					vel = Vector2.zero,
+					b =
+						currentPoint,
+
+					vel =
+						Vector2.zero,
 
 					mass =
 						seg.mass or 1,
@@ -248,11 +280,21 @@ local function processSegments(
 					thickness =
 						seg.thickness,
 
+					ignoreCapA =
+						seg.ignoreCapA,
+
+					ignoreCapB =
+						seg.ignoreCapB,
+
 					cGroup =
-						buildBitmask(seg.cGroup),
+						buildBitmask(
+							seg.cGroup
+						),
 
 					cMask =
-						buildBitmask(seg.cMask)
+						buildBitmask(
+							seg.cMask
+						)
 				}
 
 				prevPoint =
@@ -268,57 +310,66 @@ end
 -- ESTADO LOCAL
 ----------------------------------------------------
 
-local playersData: {
-	[number]: PhysicsEngine.CircleObject
-} = {}
+local playersData:
+	{[number]: PhysicsEngine.PlayerObject} = {}
 
-local sortedUserIds: { number } = {}
+local sortedUserIds:
+	{number} = {}
 
 ----------------------------------------------------
--- DISCOS
+-- DISCS
 ----------------------------------------------------
 
-local discs: {
-	PhysicsEngine.CircleObject
-} = {}
+local discs:
+	{PhysicsEngine.CircleObject} = {}
 
 if currentMap.discs then
 	for idx, disc in ipairs(currentMap.discs) do
-		discs[#discs + 1] = {
-			id =
-				disc.id
-				or ("disc_" .. idx),
 
-			pos =
-				disc.pos,
+		-- O playerObject é um molde, não um objeto
+		-- físico independente do mapa.
 
-			vel =
-				Vector2.zero,
+		if disc.id ~= playerObjectId then
+			discs[#discs + 1] = {
+				id =
+					disc.id
+					or ("disc_" .. idx),
 
-			radius =
-				disc.radius,
+				pos =
+					disc.pos,
 
-			mass =
-				disc.mass or 1,
+				vel =
+					Vector2.zero,
 
-			restitution =
-				disc.restitution or 0.5,
+				radius =
+					disc.radius,
 
-			isStatic =
-				(disc.isStatic ~= false),
+				mass =
+					disc.mass or 1,
 
-			isSolid =
-				(disc.isSolid ~= false),
+				restitution =
+					disc.restitution or 0.5,
 
-			damping =
-				disc.damping or 0.98,
+				isStatic =
+					(disc.isStatic ~= false),
 
-			cGroup =
-				buildBitmask(disc.cGroup),
+				isSolid =
+					(disc.isSolid ~= false),
 
-			cMask =
-				buildBitmask(disc.cMask)
-		}
+				damping =
+					disc.damping or 0.98,
+
+				cGroup =
+					buildBitmask(
+						disc.cGroup
+					),
+
+				cMask =
+					buildBitmask(
+						disc.cMask
+					)
+			}
+		end
 	end
 end
 
@@ -326,107 +377,152 @@ end
 -- SEGMENTOS
 ----------------------------------------------------
 
-local segments: {
-	PhysicsEngine.Segment
-} = processSegments(
-	currentMap.segments
-)
+local segments:
+	{PhysicsEngine.Segment} =
+	processSegments(
+		currentMap.segments
+	)
 
 ----------------------------------------------------
 -- SHAPES
 ----------------------------------------------------
 
-local shapes: {
-	PhysicsEngine.PhysicalShape
-} = {}
+local shapes:
+	{PhysicsEngine.PhysicalShape} = {}
 
 if currentMap.shapes then
 	for idx, shape in ipairs(currentMap.shapes) do
-		local cornerPx = 0
 
-		if typeof(shape.cornerRadius) == "UDim" then
-			cornerPx =
-				math.min(
-					shape.size.X,
-					shape.size.Y
-				)
-				* shape.cornerRadius.Scale
-				+ shape.cornerRadius.Offset
+		if shape.id ~= playerObjectId then
+			local cornerPx = 0
 
-		elseif typeof(shape.cornerRadius) == "number" then
-			cornerPx =
-				shape.cornerRadius
+			if typeof(shape.cornerRadius) == "UDim" then
+				cornerPx =
+					math.min(
+						shape.size.X,
+						shape.size.Y
+					)
+					* shape.cornerRadius.Scale
+					+ shape.cornerRadius.Offset
+
+			elseif typeof(shape.cornerRadius) == "number" then
+				cornerPx =
+					shape.cornerRadius
+			end
+
+			local shapeObject:
+				PhysicsEngine.PhysicalShape = {
+
+				id =
+					shape.id
+					or ("shape_" .. idx),
+
+				pos =
+					shape.pos,
+
+				vel =
+					Vector2.zero,
+
+				mass =
+					shape.mass or 1,
+
+				size =
+					shape.size,
+
+				rotation =
+					shape.rotation or 0,
+
+				cornerRadius =
+					cornerPx,
+
+				restitution =
+					shape.restitution or 0.5,
+
+				isStatic =
+					(shape.isStatic ~= false),
+
+				isSolid =
+					(shape.isSolid ~= false),
+
+				damping =
+					shape.damping or 0.98,
+
+				cGroup =
+					buildBitmask(
+						shape.cGroup
+					),
+
+				cMask =
+					buildBitmask(
+						shape.cMask
+					),
+
+				segmentP1 =
+					Vector2.zero,
+
+				segmentP2 =
+					Vector2.zero,
+
+				segmentRadius =
+					0
+			}
+
+			PhysicsEngine.prepareShape(
+				shapeObject
+			)
+
+			shapes[#shapes + 1] =
+				shapeObject
 		end
-
-		local shapeObject:
-			PhysicsEngine.PhysicalShape = {
-
-			id =
-				shape.id
-				or ("shape_" .. idx),
-
-			pos =
-				shape.pos,
-
-			vel =
-				Vector2.zero,
-
-			mass =
-				shape.mass or 1,
-
-			size =
-				shape.size,
-
-			rotation =
-				shape.rotation or 0,
-
-			cornerRadius =
-				cornerPx,
-
-			restitution =
-				shape.restitution or 0.5,
-
-			isStatic =
-				(shape.isStatic ~= false),
-
-			isSolid =
-				(shape.isSolid ~= false),
-
-			damping =
-				shape.damping or 0.98,
-
-			cGroup =
-				buildBitmask(shape.cGroup),
-
-			cMask =
-				buildBitmask(shape.cMask),
-
-			segmentP1 =
-				Vector2.zero,
-
-			segmentP2 =
-				Vector2.zero,
-
-			segmentRadius =
-				0,
-		}
-
-		PhysicsEngine.prepareShape(
-			shapeObject
-		)
-
-		shapes[#shapes + 1] =
-			shapeObject
 	end
 end
 
 ----------------------------------------------------
--- MAPA DE OBJETOS DINÂMICOS
+-- MOLDE DO PLAYER
 ----------------------------------------------------
 
-local dynamicObjects: {
-	[string]: any
-} = {}
+local playerTemplate: any = nil
+
+if currentMap.discs then
+	for _, disc in ipairs(currentMap.discs) do
+		if disc.id == playerObjectId then
+			playerTemplate = disc
+			break
+		end
+	end
+end
+
+if not playerTemplate and currentMap.shapes then
+	for _, shape in ipairs(currentMap.shapes) do
+		if shape.id == playerObjectId then
+			playerTemplate = shape
+			break
+		end
+	end
+end
+
+if not playerTemplate and currentMap.segments then
+	for _, segment in ipairs(currentMap.segments) do
+		if segment.id == playerObjectId then
+			playerTemplate = segment
+			break
+		end
+	end
+end
+
+if not playerTemplate then
+	error(
+		"MapData.gameplay.player.object referencia um objeto inexistente: "
+		.. tostring(playerObjectId)
+	)
+end
+
+----------------------------------------------------
+-- OBJETOS DINÂMICOS
+----------------------------------------------------
+
+local dynamicObjects:
+	{[string]: any} = {}
 
 for _, object in ipairs(shapes) do
 	if object.isStatic == false then
@@ -445,6 +541,34 @@ end
 for _, object in ipairs(segments) do
 	if object.isStatic == false then
 		dynamicObjects[object.id] =
+			object
+	end
+end
+
+----------------------------------------------------
+-- OBJETOS POR ID
+----------------------------------------------------
+
+local objectsById:
+	{[string]: any} = {}
+
+for _, object in ipairs(discs) do
+	if object.id then
+		objectsById[object.id] =
+			object
+	end
+end
+
+for _, object in ipairs(segments) do
+	if object.id then
+		objectsById[object.id] =
+			object
+	end
+end
+
+for _, object in ipairs(shapes) do
+	if object.id then
+		objectsById[object.id] =
 			object
 	end
 end
@@ -453,34 +577,8 @@ end
 -- OBJETOS CHUTÁVEIS
 ----------------------------------------------------
 
-local objectsById: {
-	[string]: any
-} = {}
-
-for _, object in ipairs(discs) do
-	if object.id then
-		objectsById[object.id] =
-			object
-	end
-end
-
-for _, object in ipairs(segments) do
-	if object.id then
-		objectsById[object.id] =
-			object
-	end
-end
-
-for _, object in ipairs(shapes) do
-	if object.id then
-		objectsById[object.id] =
-			object
-	end
-end
-
-local kickableObjects: {
-	any
-} = {}
+local kickableObjects:
+	{any} = {}
 
 local kickableIds =
 	currentMap.gameplay.kickable
@@ -575,7 +673,7 @@ local localResetCountdown =
 	0
 
 ----------------------------------------------------
--- PLAYERS ORDENADOS
+-- FUNÇÕES UTILITÁRIAS
 ----------------------------------------------------
 
 local function rebuildSortedUserIds()
@@ -592,6 +690,359 @@ local function rebuildSortedUserIds()
 end
 
 ----------------------------------------------------
+-- CRIAÇÃO DE PLAYER A PARTIR DO SNAPSHOT
+----------------------------------------------------
+
+local function createPlayerFromSnapshot(
+	pArr: any
+): PhysicsEngine.PlayerObject
+
+	local kindCode =
+		pArr[11]
+
+	local kind:
+		"disc" | "shape" | "segment"
+
+	if kindCode == 2 then
+		kind = "shape"
+	elseif kindCode == 3 then
+		kind = "segment"
+	else
+		kind = "disc"
+	end
+
+	local team =
+		pArr[10] == 1
+		and "Red"
+		or "Blue"
+
+	local collisionGroup =
+		buildBitmask(
+			playerGameplay.collision.group
+		)
+
+	local collisionMask =
+		buildBitmask(
+			playerGameplay.collision.mask
+		)
+
+	local common = {
+		id = playerObjectId,
+
+		vel =
+			Vector2.new(
+				pArr[4],
+				pArr[5]
+			),
+
+		mass =
+			playerTemplate.mass or 1,
+
+		restitution =
+			playerTemplate.restitution or 0.1,
+
+		isStatic = false,
+		isSolid = true,
+
+		team = team,
+
+		input =
+			Vector2.new(
+				pArr[6],
+				pArr[7]
+			),
+
+		isKicking =
+			pArr[8] == 1,
+
+		lastKickTick =
+			pArr[9],
+
+		cGroup =
+			collisionGroup,
+
+		cMask =
+			collisionMask
+	}
+
+	------------------------------------------------
+	-- DISC
+	------------------------------------------------
+
+	if kind == "disc" then
+		return {
+			kind = "disc",
+
+			id = common.id,
+
+			pos =
+				Vector2.new(
+					pArr[2],
+					pArr[3]
+				),
+
+			vel =
+				common.vel,
+
+			radius =
+				playerTemplate.radius,
+
+			mass =
+				common.mass,
+
+			restitution =
+				common.restitution,
+
+			isStatic =
+				common.isStatic,
+
+			isSolid =
+				common.isSolid,
+
+			team =
+				common.team,
+
+			input =
+				common.input,
+
+			isKicking =
+				common.isKicking,
+
+			lastKickTick =
+				common.lastKickTick,
+
+			cGroup =
+				common.cGroup,
+
+			cMask =
+				common.cMask
+		}
+	end
+
+	------------------------------------------------
+	-- SHAPE
+	------------------------------------------------
+
+	if kind == "shape" then
+		local cornerPx = 0
+
+		if typeof(playerTemplate.cornerRadius) == "UDim" then
+			cornerPx =
+				math.min(
+					playerTemplate.size.X,
+					playerTemplate.size.Y
+				)
+				* playerTemplate.cornerRadius.Scale
+				+ playerTemplate.cornerRadius.Offset
+
+		elseif typeof(playerTemplate.cornerRadius) == "number" then
+			cornerPx =
+				playerTemplate.cornerRadius
+		end
+
+		local playerObject:
+			PhysicsEngine.PlayerObject = {
+
+			kind = "shape",
+
+			id = common.id,
+
+			pos =
+				Vector2.new(
+					pArr[2],
+					pArr[3]
+				),
+
+			vel =
+				common.vel,
+
+			mass =
+				common.mass,
+
+			restitution =
+				common.restitution,
+
+			size =
+				playerTemplate.size,
+
+			rotation =
+				playerTemplate.rotation or 0,
+
+			cornerRadius =
+				cornerPx,
+
+			segmentP1 =
+				Vector2.zero,
+
+			segmentP2 =
+				Vector2.zero,
+
+			segmentRadius =
+				0,
+
+			isStatic =
+				common.isStatic,
+
+			isSolid =
+				common.isSolid,
+
+			team =
+				common.team,
+
+			input =
+				common.input,
+
+			isKicking =
+				common.isKicking,
+
+			lastKickTick =
+				common.lastKickTick,
+
+			cGroup =
+				common.cGroup,
+
+			cMask =
+				common.cMask
+		}
+
+		local temporaryShape:
+			PhysicsEngine.PhysicalShape = {
+
+			id =
+				playerObjectId,
+
+			pos =
+				playerObject.pos :: Vector2,
+
+			vel =
+				Vector2.zero,
+
+			mass =
+				common.mass,
+
+			size =
+				playerTemplate.size,
+
+			rotation =
+				playerTemplate.rotation or 0,
+
+			cornerRadius =
+				cornerPx,
+
+			restitution =
+				common.restitution,
+
+			isStatic =
+				false,
+
+			isSolid =
+				true,
+
+			damping =
+				playerTemplate.damping or 0.98,
+
+			cGroup =
+				common.cGroup,
+
+			cMask =
+				common.cMask,
+
+			segmentP1 =
+				Vector2.zero,
+
+			segmentP2 =
+				Vector2.zero,
+
+			segmentRadius =
+				0
+		}
+
+		PhysicsEngine.prepareShape(
+			temporaryShape
+		)
+
+		playerObject.segmentP1 =
+			temporaryShape.segmentP1
+
+		playerObject.segmentP2 =
+			temporaryShape.segmentP2
+
+		playerObject.segmentRadius =
+			temporaryShape.segmentRadius
+
+		return playerObject
+	end
+
+	------------------------------------------------
+	-- SEGMENT
+	------------------------------------------------
+
+	local a =
+		Vector2.new(
+			pArr[12],
+			pArr[13]
+		)
+
+	local b =
+		Vector2.new(
+			pArr[14],
+			pArr[15]
+		)
+
+	return {
+		kind = "segment",
+
+		id =
+			common.id,
+
+		vel =
+			common.vel,
+
+		a = a,
+		b = b,
+
+		thickness =
+			playerTemplate.thickness,
+
+		ignoreCapA =
+			playerTemplate.ignoreCapA,
+
+		ignoreCapB =
+			playerTemplate.ignoreCapB,
+
+		mass =
+			common.mass,
+
+		restitution =
+			common.restitution,
+
+		isStatic =
+			common.isStatic,
+
+		isSolid =
+			common.isSolid,
+
+		team =
+			common.team,
+
+		input =
+			common.input,
+
+		isKicking =
+			common.isKicking,
+
+		lastKickTick =
+			common.lastKickTick,
+
+		cGroup =
+			common.cGroup,
+
+		cMask =
+			common.cMask
+	}
+end
+
+----------------------------------------------------
 -- INPUTS
 ----------------------------------------------------
 
@@ -605,28 +1056,26 @@ local function applyInputsForTick(
 		local pData =
 			playersData[uId]
 
-		if pData then
-			if uId == myId then
-				local input =
-					localInputBuffer:getLocal(
-						tick
-					)
+		if pData and uId == myId then
+			local input =
+				localInputBuffer:getLocal(
+					tick
+				)
 
-				pData.input =
-					Vector2.new(
-						input.moveX,
-						input.moveY
-					)
+			pData.input =
+				Vector2.new(
+					input.moveX,
+					input.moveY
+				)
 
-				pData.isKicking =
-					input.kick
-			end
+			pData.isKicking =
+				input.kick
 		end
 	end
 end
 
 ----------------------------------------------------
--- RENDERIZAÇÃO
+-- RENDERIZAÇÃO DO MAPA
 ----------------------------------------------------
 
 local mapElements =
@@ -634,6 +1083,23 @@ local mapElements =
 		currentMap,
 		playerGui
 	)
+
+----------------------------------------------------
+-- REMOVER O MOLDE DO PLAYER DO MAPA
+----------------------------------------------------
+
+local playerTemplateFrame =
+	mapElements.field:FindFirstChild(
+		playerObjectId
+	)
+
+if playerTemplateFrame then
+	playerTemplateFrame:Destroy()
+end
+
+----------------------------------------------------
+-- HUD
+----------------------------------------------------
 
 local hud =
 	HUDRenderer.Build(
@@ -647,13 +1113,15 @@ local hud =
 type PlayerRender = {
 	frame: Frame,
 	stroke: UIStroke?,
-	renderPos: Vector2,
+	kind: "disc" | "shape" | "segment",
+	renderPos: Vector2?,
+	renderA: Vector2?,
+	renderB: Vector2?,
 	lastKicking: boolean
 }
 
-local playerRenders: {
-	[number]: PlayerRender
-} = {}
+local playerRenders:
+	{[number]: PlayerRender} = {}
 
 ----------------------------------------------------
 -- DYNAMIC RENDER
@@ -667,9 +1135,8 @@ type DynamicRender = {
 	renderB: Vector2?
 }
 
-local mapDynamicRenders: {
-	[string]: DynamicRender
-} = {}
+local mapDynamicRenders:
+	{[string]: DynamicRender} = {}
 
 for id, frame in pairs(
 	mapElements.dynamicFrames
@@ -718,6 +1185,161 @@ else
 end
 
 ----------------------------------------------------
+-- CRIAÇÃO DO RENDER DO PLAYER
+----------------------------------------------------
+
+local function createPlayerRender(
+	pData: PhysicsEngine.PlayerObject
+): PlayerRender
+
+	local color =
+		pData.team == "Red"
+		and Color3.fromRGB(
+			220,
+			60,
+			60
+		)
+		or Color3.fromRGB(
+			60,
+			120,
+			220
+		)
+
+	------------------------------------------------
+	-- DISC
+	------------------------------------------------
+
+	if pData.kind == "disc" then
+		local frame, stroke =
+			UIPrimitives.CreateDisc(
+				mapElements.field,
+
+				pData.pos :: Vector2,
+
+				pData.radius :: number,
+
+				color,
+
+				3,
+
+				Color3.fromRGB(
+					0,
+					0,
+					0
+				),
+
+				"Player_" .. tostring(pData.id)
+			)
+
+		return {
+			frame = frame,
+			stroke = stroke,
+			kind = "disc",
+
+			renderPos =
+				pData.pos,
+
+			renderA = nil,
+			renderB = nil,
+
+			lastKicking =
+				pData.isKicking or false
+		}
+	end
+
+	------------------------------------------------
+	-- SHAPE
+	------------------------------------------------
+
+	if pData.kind == "shape" then
+		local frame, stroke =
+			UIPrimitives.CreateShape(
+				mapElements.field,
+				{
+					id =
+						"Player_" .. tostring(pData.id),
+
+					pos =
+						pData.pos :: Vector2,
+
+					size =
+						pData.size :: Vector2,
+
+					color =
+						color,
+
+					cornerRadius =
+						pData.cornerRadius,
+
+					strokeWidth =
+						3,
+
+					strokeColor =
+						Color3.fromRGB(
+							0,
+							0,
+							0
+						),
+
+					rotation =
+						pData.rotation or 0
+				}
+			)
+
+		return {
+			frame = frame,
+			stroke = stroke,
+			kind = "shape",
+
+			renderPos =
+				pData.pos,
+
+			renderA = nil,
+			renderB = nil,
+
+			lastKicking =
+				pData.isKicking or false
+		}
+	end
+
+	------------------------------------------------
+	-- SEGMENT
+	------------------------------------------------
+
+	local frame =
+		UIPrimitives.CreateSegment(
+			mapElements.field,
+
+			pData.a :: Vector2,
+
+			pData.b :: Vector2,
+
+			pData.thickness or 1,
+
+			color,
+
+			"Player_" .. tostring(pData.id)
+		)
+
+	return {
+		frame = frame,
+		stroke = nil,
+		kind = "segment",
+
+		renderPos = nil,
+
+		renderA =
+			pData.a,
+
+		renderB =
+			pData.b,
+
+		lastKicking =
+			pData.isKicking or false
+	}
+end
+
+----------------------------------------------------
 -- SNAPSHOTS
 ----------------------------------------------------
 
@@ -758,12 +1380,12 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		-- PLAYERS
 		------------------------------------------------
 
-		local activeIds = {}
+		local activeIds:
+			{[number]: boolean} = {}
 
 		for _, pArr in ipairs(
 			packed[5]
 		) do
-
 			local uId =
 				pArr[1]
 
@@ -771,62 +1393,10 @@ gameSnapshotEvent.OnClientEvent:Connect(
 				true
 
 			if not playersData[uId] then
-
-				playersData[uId] = {
-					pos =
-						Vector2.new(
-							pArr[2],
-							pArr[3]
-						),
-
-					vel =
-						Vector2.new(
-							pArr[4],
-							pArr[5]
-						),
-
-					radius =
-						playerPhys.radius,
-
-					mass =
-						playerPhys.mass,
-
-					restitution =
-						0.1,
-
-					team =
-						pArr[10] == 1
-						and "Red"
-						or "Blue",
-
-					input =
-						Vector2.new(
-							pArr[6],
-							pArr[7]
-						),
-
-					isKicking =
-						pArr[8] == 1,
-
-					lastKickTick =
-						pArr[9],
-
-					isSolid =
-						true,
-
-					isStatic =
-						false,
-
-					cGroup =
-						buildBitmask(
-							playerPhys.collision.group
-						),
-
-					cMask =
-						buildBitmask(
-							playerPhys.collision.mask
-						)
-				}
+				playersData[uId] =
+					createPlayerFromSnapshot(
+						pArr
+					)
 			end
 		end
 
@@ -855,7 +1425,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		rebuildSortedUserIds()
 
 		------------------------------------------------
-		-- ROLLBACK
+		-- RESTORE DO SNAPSHOT
 		------------------------------------------------
 
 		GameState.restorePacked(
@@ -866,13 +1436,16 @@ gameSnapshotEvent.OnClientEvent:Connect(
 			shapes
 		)
 
+		------------------------------------------------
+		-- ROLLBACK
+		------------------------------------------------
+
 		if localTick > serverTick then
 
 			for replayTick =
 				serverTick,
 				localTick - 1
 			do
-
 				applyInputsForTick(
 					replayTick
 				)
@@ -880,20 +1453,24 @@ gameSnapshotEvent.OnClientEvent:Connect(
 				PhysicsEngine.Step(
 					playersData,
 					sortedUserIds,
+
 					discs,
 					segments,
 					shapes,
+
 					collisionDiscs,
 					collisionSegments,
 					collisionShapes,
+
 					broadphase,
+
 					currentMap.gameplay,
 					kickableObjects,
+
 					FIXED_DT,
 					replayTick
 				)
 			end
-
 		else
 			localTick =
 				serverTick
@@ -974,15 +1551,20 @@ RunService.Heartbeat:Connect(
 			PhysicsEngine.Step(
 				playersData,
 				sortedUserIds,
+
 				discs,
 				segments,
 				shapes,
+
 				collisionDiscs,
 				collisionSegments,
 				collisionShapes,
+
 				broadphase,
+
 				currentMap.gameplay,
 				kickableObjects,
+
 				FIXED_DT,
 				localTick
 			)
@@ -1004,7 +1586,8 @@ RunService.Heartbeat:Connect(
 		local moveY =
 			currentMoveVector.Y
 
-		if moveX ~= lastSentMoveX
+		if
+			moveX ~= lastSentMoveX
 			or moveY ~= lastSentMoveY
 			or currentIsKicking
 				~= lastSentKickState
@@ -1040,12 +1623,12 @@ RunService.RenderStepped:Connect(
 				-35 * dt
 			)
 
+		local myId =
+			player.UserId
+
 		------------------------------------------------
 		-- PLAYERS
 		------------------------------------------------
-
-		local myId =
-			player.UserId
 
 		for _, uId in ipairs(
 			sortedUserIds
@@ -1059,48 +1642,31 @@ RunService.RenderStepped:Connect(
 				local render =
 					playerRenders[uId]
 
+				------------------------------------------------
+				-- CRIAR RENDER
+				------------------------------------------------
+
 				if not render then
-
-					local color =
-						pData.team == "Red"
-						and Color3.fromRGB(
-							220,
-							60,
-							60
-						)
-						or Color3.fromRGB(
-							60,
-							120,
-							220
+					render =
+						createPlayerRender(
+							pData
 						)
 
-					local frame, stroke =
-						UIPrimitives.CreateDisc(
-							mapElements.field,
-							pData.pos,
-							playerPhys.radius,
-							color,
-							3,
-							Color3.fromRGB(
-								0,
-								0,
-								0
-							)
+					playerRenders[uId] =
+						render
+				end
+
+				------------------------------------------------
+				-- CASO O TIPO TENHA MUDADO
+				------------------------------------------------
+
+				if render.kind ~= pData.kind then
+					render.frame:Destroy()
+
+					render =
+						createPlayerRender(
+							pData
 						)
-
-					render = {
-						frame =
-							frame,
-
-						stroke =
-							stroke,
-
-						renderPos =
-							pData.pos,
-
-						lastKicking =
-							pData.isKicking
-					}
 
 					playerRenders[uId] =
 						render
@@ -1120,25 +1686,109 @@ RunService.RenderStepped:Connect(
 						)
 				end
 
-				render.renderPos =
-					render.renderPos:Lerp(
-						pData.pos,
-						interpAlpha
-					)
-
-				render.frame.Position =
-					UDim2.new(
-						0,
-						render.renderPos.X,
-						0,
-						render.renderPos.Y
-					)
-
 				------------------------------------------------
-				-- STROKE
+				-- DISC / SHAPE
 				------------------------------------------------
 
-				if render.stroke
+				if
+					pData.kind == "disc"
+					or pData.kind == "shape"
+				then
+
+					local pos =
+						pData.pos :: Vector2
+
+					render.renderPos =
+						(render.renderPos :: Vector2):Lerp(
+							pos,
+							interpAlpha
+						)
+
+					render.frame.Position =
+						UDim2.new(
+							0,
+							(render.renderPos :: Vector2).X,
+							0,
+							(render.renderPos :: Vector2).Y
+						)
+
+					if pData.kind == "shape" then
+						render.frame.Rotation =
+							pData.rotation or 0
+					end
+
+				------------------------------------------------
+				-- SEGMENT
+				------------------------------------------------
+
+				else
+					local a =
+						pData.a :: Vector2
+
+					local b =
+						pData.b :: Vector2
+
+					render.renderA =
+						(render.renderA :: Vector2):Lerp(
+							a,
+							interpAlpha
+						)
+
+					render.renderB =
+						(render.renderB :: Vector2):Lerp(
+							b,
+							interpAlpha
+						)
+
+					local rA =
+						render.renderA :: Vector2
+
+					local rB =
+						render.renderB :: Vector2
+
+					local midPoint =
+						(rA + rB) / 2
+
+					local diff =
+						rB - rA
+
+					local length =
+						diff.Magnitude
+
+					local angle =
+						math.deg(
+							math.atan2(
+								diff.Y,
+								diff.X
+							)
+						)
+
+					render.frame.Position =
+						UDim2.new(
+							0,
+							midPoint.X,
+							0,
+							midPoint.Y
+						)
+
+					render.frame.Size =
+						UDim2.new(
+							0,
+							length,
+							0,
+							render.frame.Size.Y.Offset
+						)
+
+					render.frame.Rotation =
+						angle
+				end
+
+				------------------------------------------------
+				-- KICK VISUAL
+				------------------------------------------------
+
+				if
+					render.stroke
 					and render.lastKicking
 						~= pData.isKicking
 				then
@@ -1169,7 +1819,6 @@ RunService.RenderStepped:Connect(
 		for uId, render in pairs(
 			playerRenders
 		) do
-
 			if not playersData[uId] then
 				render.frame:Destroy()
 
