@@ -414,7 +414,7 @@ RunService.Heartbeat:Connect(function(dt)
 		applyInputsForTick(currentTick)
 
 		-- 2. Step da física
-		PhysicsEngine.Step(playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, currentMap.gameplay.player, currentMap.gameplay.kick, kickableObjects, FIXED_DT, currentTick)
+		PhysicsEngine.Step(playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, currentMap.gameplay, kickableObjects, FIXED_DT, currentTick)
 
 		-- 3. Checar gols (determinístico, tick-based)
 		MatchManager.CheckGoals(currentMap, playersData, discs, segments, shapes)
