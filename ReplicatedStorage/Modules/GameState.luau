@@ -4,8 +4,6 @@
 
 local GameState = {}
 
--- Cache dos mapas de objetos.
--- A identidade das tabelas permanece estável durante a partida.
 local objectMapCache = setmetatable({}, { __mode = "k" })
 
 local function getObjectMap(objects: { any }): { [string]: any }
@@ -37,6 +35,8 @@ export type InputData = {
 }
 
 export type PlayerSnapshot = {
+	kind: "disc" | "shape" | "segment",
+
 	posX: number,
 	posY: number,
 
@@ -50,6 +50,11 @@ export type PlayerSnapshot = {
 	lastKickTick: number,
 
 	team: string,
+
+	aX: number?,
+	aY: number?,
+	bX: number?,
+	bY: number?,
 }
 
 export type DiscSnapshot = {
@@ -100,6 +105,34 @@ export type WorldSnapshot = {
 }
 
 ----------------------------------------------------
+-- PLAYER GEOMETRY TYPE
+----------------------------------------------------
+
+local function getPlayerKindCode(
+	kind: "disc" | "shape" | "segment"
+): number
+	if kind == "shape" then
+		return 2
+	elseif kind == "segment" then
+		return 3
+	end
+
+	return 1
+end
+
+local function getPlayerKindFromCode(
+	code: number?
+): "disc" | "shape" | "segment"
+	if code == 2 then
+		return "shape"
+	elseif code == 3 then
+		return "segment"
+	end
+
+	return "disc"
+end
+
+----------------------------------------------------
 -- SNAPSHOT
 ----------------------------------------------------
 
@@ -133,21 +166,75 @@ function GameState.snapshot(
 	------------------------------------------------
 
 	for uId, p in pairs(playersData) do
-		snap.players[uId] = {
-			posX = p.pos.X,
-			posY = p.pos.Y,
+		local kind =
+			p.kind
+			or "disc"
 
-			velX = p.vel.X,
-			velY = p.vel.Y,
+		local vel =
+			p.vel
+			or Vector2.zero
 
-			inputX = p.input and p.input.X or 0,
-			inputY = p.input and p.input.Y or 0,
+		local input =
+			p.input
+			or Vector2.zero
 
-			isKicking = p.isKicking or false,
-			lastKickTick = p.lastKickTick or -9999,
+		local pos = Vector2.zero
 
-			team = p.team or "Red",
-		}
+		if kind == "segment" then
+			local a = p.a :: Vector2
+			local b = p.b :: Vector2
+
+			pos = (a + b) * 0.5
+
+			snap.players[uId] = {
+				kind = "segment",
+
+				posX = pos.X,
+				posY = pos.Y,
+
+				velX = vel.X,
+				velY = vel.Y,
+
+				inputX = input.X,
+				inputY = input.Y,
+
+				isKicking = p.isKicking or false,
+				lastKickTick = p.lastKickTick or -9999,
+
+				team = p.team or "Red",
+
+				aX = a.X,
+				aY = a.Y,
+
+				bX = b.X,
+				bY = b.Y,
+			}
+		else
+			pos = p.pos :: Vector2
+
+			snap.players[uId] = {
+				kind = kind,
+
+				posX = pos.X,
+				posY = pos.Y,
+
+				velX = vel.X,
+				velY = vel.Y,
+
+				inputX = input.X,
+				inputY = input.Y,
+
+				isKicking = p.isKicking or false,
+				lastKickTick = p.lastKickTick or -9999,
+
+				team = p.team or "Red",
+
+				aX = nil,
+				aY = nil,
+				bX = nil,
+				bY = nil,
+			}
+		end
 	end
 
 	------------------------------------------------
@@ -156,7 +243,9 @@ function GameState.snapshot(
 
 	for _, d in ipairs(discs) do
 		if not d.isStatic then
-			local vel = d.vel or Vector2.zero
+			local vel =
+				d.vel
+				or Vector2.zero
 
 			snap.discs[#snap.discs + 1] = {
 				id = d.id,
@@ -176,7 +265,9 @@ function GameState.snapshot(
 
 	for _, seg in ipairs(segments) do
 		if not seg.isStatic then
-			local vel = seg.vel or Vector2.zero
+			local vel =
+				seg.vel
+				or Vector2.zero
 
 			snap.segments[#snap.segments + 1] = {
 				id = seg.id,
@@ -199,7 +290,9 @@ function GameState.snapshot(
 
 	for _, s in ipairs(shapes) do
 		if not s.isStatic then
-			local vel = s.vel or Vector2.zero
+			local vel =
+				s.vel
+				or Vector2.zero
 
 			snap.shapes[#snap.shapes + 1] = {
 				id = s.id,
@@ -228,10 +321,6 @@ function GameState.restore(
 	shapes: { any },
 	matchManager: any?
 )
-	------------------------------------------------
-	-- ESTADO DA PARTIDA
-	------------------------------------------------
-
 	if matchManager then
 		matchManager.SetState(
 			snap.scoreRed,
@@ -245,14 +334,10 @@ function GameState.restore(
 	------------------------------------------------
 
 	for uId, pSnap in pairs(snap.players) do
-		local p = playersData[uId]
+		local p =
+			playersData[uId]
 
 		if p then
-			p.pos = Vector2.new(
-				pSnap.posX,
-				pSnap.posY
-			)
-
 			p.vel = Vector2.new(
 				pSnap.velX,
 				pSnap.velY
@@ -263,8 +348,38 @@ function GameState.restore(
 				pSnap.inputY
 			)
 
-			p.isKicking = pSnap.isKicking
-			p.lastKickTick = pSnap.lastKickTick
+			p.isKicking =
+				pSnap.isKicking
+
+			p.lastKickTick =
+				pSnap.lastKickTick
+
+			p.kind =
+				pSnap.kind
+
+			if pSnap.kind == "segment" then
+				if
+					pSnap.aX ~= nil
+					and pSnap.aY ~= nil
+					and pSnap.bX ~= nil
+					and pSnap.bY ~= nil
+				then
+					p.a = Vector2.new(
+						pSnap.aX,
+						pSnap.aY
+					)
+
+					p.b = Vector2.new(
+						pSnap.bX,
+						pSnap.bY
+					)
+				end
+			else
+				p.pos = Vector2.new(
+					pSnap.posX,
+					pSnap.posY
+				)
+			end
 		end
 	end
 
@@ -273,10 +388,12 @@ function GameState.restore(
 	------------------------------------------------
 
 	if #snap.discs > 0 then
-		local discMap = getObjectMap(discs)
+		local discMap =
+			getObjectMap(discs)
 
 		for _, dSnap in ipairs(snap.discs) do
-			local d = discMap[dSnap.id]
+			local d =
+				discMap[dSnap.id]
 
 			if d then
 				d.pos = Vector2.new(
@@ -297,10 +414,12 @@ function GameState.restore(
 	------------------------------------------------
 
 	if #snap.segments > 0 then
-		local segmentMap = getObjectMap(segments)
+		local segmentMap =
+			getObjectMap(segments)
 
 		for _, sSnap in ipairs(snap.segments) do
-			local seg = segmentMap[sSnap.id]
+			local seg =
+				segmentMap[sSnap.id]
 
 			if seg then
 				seg.a = Vector2.new(
@@ -326,10 +445,12 @@ function GameState.restore(
 	------------------------------------------------
 
 	if #snap.shapes > 0 then
-		local shapeMap = getObjectMap(shapes)
+		local shapeMap =
+			getObjectMap(shapes)
 
 		for _, sSnap in ipairs(snap.shapes) do
-			local s = shapeMap[sSnap.id]
+			local s =
+				shapeMap[sSnap.id]
 
 			if s then
 				s.pos = Vector2.new(
@@ -348,7 +469,6 @@ end
 
 ----------------------------------------------------
 -- PACK LIVE STATE
--- Servidor → Cliente
 ----------------------------------------------------
 
 function GameState.packLiveState(
@@ -377,28 +497,82 @@ function GameState.packLiveState(
 	local playersArr = {}
 
 	for _, uId in ipairs(sortedUserIds) do
-		local p = playersData[uId]
+		local p =
+			playersData[uId]
 
 		if p then
-			local input = p.input
+			local input =
+				p.input
+				or Vector2.zero
+
+			local kind =
+				p.kind
+				or "disc"
+
+			local posX
+			local posY
+
+			local aX
+			local aY
+			local bX
+			local bY
+
+			if kind == "segment" then
+				local a = p.a :: Vector2
+				local b = p.b :: Vector2
+
+				local center =
+					(a + b) * 0.5
+
+				posX = center.X
+				posY = center.Y
+
+				aX = a.X
+				aY = a.Y
+
+				bX = b.X
+				bY = b.Y
+			else
+				local pos = p.pos :: Vector2
+
+				posX = pos.X
+				posY = pos.Y
+			end
 
 			playersArr[#playersArr + 1] = {
 				uId,
 
-				p.pos.X,
-				p.pos.Y,
+				-- [2],[3] = posição/centro
+				posX,
+				posY,
 
+				-- [4],[5] = velocidade
 				p.vel.X,
 				p.vel.Y,
 
-				input and input.X or 0,
-				input and input.Y or 0,
+				-- [6],[7] = input
+				input.X,
+				input.Y,
 
+				-- [8] = kick
 				p.isKicking and 1 or 0,
 
+				-- [9] = último tick de kick
 				p.lastKickTick or -9999,
 
+				-- [10] = team
 				p.team == "Red" and 1 or 2,
+
+				-- [11] = tipo geométrico
+				getPlayerKindCode(kind),
+
+				-- [12],[13] = A
+				aX,
+				aY,
+
+				-- [14],[15] = B
+				bX,
+				bY,
 			}
 		end
 	end
@@ -412,7 +586,9 @@ function GameState.packLiveState(
 	local dynShapes = {}
 
 	for _, s in ipairs(shapes) do
-		local vel = s.vel or Vector2.zero
+		local vel =
+			s.vel
+			or Vector2.zero
 
 		dynShapes[#dynShapes + 1] = {
 			s.id,
@@ -434,7 +610,9 @@ function GameState.packLiveState(
 	local dynDiscs = {}
 
 	for _, d in ipairs(discs) do
-		local vel = d.vel or Vector2.zero
+		local vel =
+			d.vel
+			or Vector2.zero
 
 		dynDiscs[#dynDiscs + 1] = {
 			d.id,
@@ -456,7 +634,9 @@ function GameState.packLiveState(
 	local dynSegs = {}
 
 	for _, seg in ipairs(segments) do
-		local vel = seg.vel or Vector2.zero
+		local vel =
+			seg.vel
+			or Vector2.zero
 
 		dynSegs[#dynSegs + 1] = {
 			seg.id,
@@ -493,56 +673,28 @@ function GameState.packForNetwork(
 	packed[3] = snap.scoreBlue
 	packed[4] = snap.resetCountdown
 
-	------------------------------------------------
-	-- PLAYERS
-	------------------------------------------------
-
 	local playersArr = {}
 
+	local playerKeys = {}
+
 	if sortedUserIds then
-
 		for _, uId in ipairs(sortedUserIds) do
-			local p = snap.players[uId]
-
-			if p then
-				table.insert(playersArr, {
-					uId,
-
-					p.posX,
-					p.posY,
-
-					p.velX,
-					p.velY,
-
-					p.inputX,
-					p.inputY,
-
-					p.isKicking and 1 or 0,
-
-					p.lastKickTick,
-
-					p.team == "Red" and 1 or 2,
-				})
-			end
+			playerKeys[#playerKeys + 1] = uId
 		end
-
 	else
-
-		local playerKeys = {}
-
 		for uId in pairs(snap.players) do
-			table.insert(
-				playerKeys,
-				uId
-			)
+			playerKeys[#playerKeys + 1] = uId
 		end
 
 		table.sort(playerKeys)
+	end
 
-		for _, uId in ipairs(playerKeys) do
-			local p = snap.players[uId]
+	for _, uId in ipairs(playerKeys) do
+		local p =
+			snap.players[uId]
 
-			table.insert(playersArr, {
+		if p then
+			playersArr[#playersArr + 1] = {
 				uId,
 
 				p.posX,
@@ -559,7 +711,17 @@ function GameState.packForNetwork(
 				p.lastKickTick,
 
 				p.team == "Red" and 1 or 2,
-			})
+
+				getPlayerKindCode(
+					p.kind
+				),
+
+				p.aX,
+				p.aY,
+
+				p.bX,
+				p.bY,
+			}
 		end
 	end
 
@@ -572,16 +734,15 @@ function GameState.packForNetwork(
 	local dynShapes = {}
 
 	for _, s in ipairs(snap.shapes) do
-		table.insert(
-			dynShapes,
-			{
-				s.id,
-				s.posX,
-				s.posY,
-				s.velX,
-				s.velY,
-			}
-		)
+		dynShapes[#dynShapes + 1] = {
+			s.id,
+
+			s.posX,
+			s.posY,
+
+			s.velX,
+			s.velY,
+		}
 	end
 
 	packed[6] = dynShapes
@@ -593,16 +754,15 @@ function GameState.packForNetwork(
 	local dynDiscs = {}
 
 	for _, d in ipairs(snap.discs) do
-		table.insert(
-			dynDiscs,
-			{
-				d.id,
-				d.posX,
-				d.posY,
-				d.velX,
-				d.velY,
-			}
-		)
+		dynDiscs[#dynDiscs + 1] = {
+			d.id,
+
+			d.posX,
+			d.posY,
+
+			d.velX,
+			d.velY,
+		}
 	end
 
 	packed[7] = dynDiscs
@@ -614,21 +774,18 @@ function GameState.packForNetwork(
 	local dynSegs = {}
 
 	for _, seg in ipairs(snap.segments) do
-		table.insert(
-			dynSegs,
-			{
-				seg.id,
+		dynSegs[#dynSegs + 1] = {
+			seg.id,
 
-				seg.aX,
-				seg.aY,
+			seg.aX,
+			seg.aY,
 
-				seg.bX,
-				seg.bY,
+			seg.bX,
+			seg.bY,
 
-				seg.velX,
-				seg.velY,
-			}
-		)
+			seg.velX,
+			seg.velY,
+		}
 	end
 
 	packed[8] = dynSegs
@@ -652,13 +809,16 @@ function GameState.restorePacked(
 	------------------------------------------------
 
 	for _, pArr in ipairs(packed[5]) do
-		local p = playersData[pArr[1]]
+		local p =
+			playersData[pArr[1]]
 
 		if p then
-			p.pos = Vector2.new(
-				pArr[2],
-				pArr[3]
-			)
+			local kind =
+				getPlayerKindFromCode(
+					pArr[11]
+				)
+
+			p.kind = kind
 
 			p.vel = Vector2.new(
 				pArr[4],
@@ -670,8 +830,28 @@ function GameState.restorePacked(
 				pArr[7]
 			)
 
-			p.isKicking = pArr[8] == 1
-			p.lastKickTick = pArr[9]
+			p.isKicking =
+				pArr[8] == 1
+
+			p.lastKickTick =
+				pArr[9]
+
+			if kind == "segment" then
+				p.a = Vector2.new(
+					pArr[12],
+					pArr[13]
+				)
+
+				p.b = Vector2.new(
+					pArr[14],
+					pArr[15]
+				)
+			else
+				p.pos = Vector2.new(
+					pArr[2],
+					pArr[3]
+				)
+			end
 		end
 	end
 
@@ -679,10 +859,12 @@ function GameState.restorePacked(
 	-- SHAPES
 	------------------------------------------------
 
-	local shapeMap = getObjectMap(shapes)
+	local shapeMap =
+		getObjectMap(shapes)
 
 	for _, sArr in ipairs(packed[6]) do
-		local shape = shapeMap[sArr[1]]
+		local shape =
+			shapeMap[sArr[1]]
 
 		if shape then
 			shape.pos = Vector2.new(
@@ -701,10 +883,12 @@ function GameState.restorePacked(
 	-- DISCS
 	------------------------------------------------
 
-	local discMap = getObjectMap(discs)
+	local discMap =
+		getObjectMap(discs)
 
 	for _, dArr in ipairs(packed[7]) do
-		local disc = discMap[dArr[1]]
+		local disc =
+			discMap[dArr[1]]
 
 		if disc then
 			disc.pos = Vector2.new(
@@ -723,10 +907,12 @@ function GameState.restorePacked(
 	-- SEGMENTS
 	------------------------------------------------
 
-	local segmentMap = getObjectMap(segments)
+	local segmentMap =
+		getObjectMap(segments)
 
 	for _, segArr in ipairs(packed[8]) do
-		local segment = segmentMap[segArr[1]]
+		local segment =
+			segmentMap[segArr[1]]
 
 		if segment then
 			segment.a = Vector2.new(
@@ -758,15 +944,15 @@ function GameState.unpackFromNetwork(
 	local snap: WorldSnapshot = {
 		tick = packed[1],
 
+		players = {},
+
+		discs = {},
+		segments = {},
+		shapes = {},
+
 		scoreRed = packed[2],
 		scoreBlue = packed[3],
 		resetCountdown = packed[4],
-
-		players = {},
-
-		shapes = {},
-		discs = {},
-		segments = {},
 	}
 
 	------------------------------------------------
@@ -774,7 +960,14 @@ function GameState.unpackFromNetwork(
 	------------------------------------------------
 
 	for _, pArr in ipairs(packed[5]) do
+		local kind =
+			getPlayerKindFromCode(
+				pArr[11]
+			)
+
 		snap.players[pArr[1]] = {
+			kind = kind,
+
 			posX = pArr[2],
 			posY = pArr[3],
 
@@ -791,6 +984,12 @@ function GameState.unpackFromNetwork(
 				pArr[10] == 1
 				and "Red"
 				or "Blue",
+
+			aX = pArr[12],
+			aY = pArr[13],
+
+			bX = pArr[14],
+			bY = pArr[15],
 		}
 	end
 
@@ -799,18 +998,15 @@ function GameState.unpackFromNetwork(
 	------------------------------------------------
 
 	for _, sArr in ipairs(packed[6]) do
-		table.insert(
-			snap.shapes,
-			{
-				id = sArr[1],
+		snap.shapes[#snap.shapes + 1] = {
+			id = sArr[1],
 
-				posX = sArr[2],
-				posY = sArr[3],
+			posX = sArr[2],
+			posY = sArr[3],
 
-				velX = sArr[4],
-				velY = sArr[5],
-			}
-		)
+			velX = sArr[4],
+			velY = sArr[5],
+		}
 	end
 
 	------------------------------------------------
@@ -818,18 +1014,15 @@ function GameState.unpackFromNetwork(
 	------------------------------------------------
 
 	for _, dArr in ipairs(packed[7]) do
-		table.insert(
-			snap.discs,
-			{
-				id = dArr[1],
+		snap.discs[#snap.discs + 1] = {
+			id = dArr[1],
 
-				posX = dArr[2],
-				posY = dArr[3],
+			posX = dArr[2],
+			posY = dArr[3],
 
-				velX = dArr[4],
-				velY = dArr[5],
-			}
-		)
+			velX = dArr[4],
+			velY = dArr[5],
+		}
 	end
 
 	------------------------------------------------
@@ -837,21 +1030,18 @@ function GameState.unpackFromNetwork(
 	------------------------------------------------
 
 	for _, segArr in ipairs(packed[8]) do
-		table.insert(
-			snap.segments,
-			{
-				id = segArr[1],
+		snap.segments[#snap.segments + 1] = {
+			id = segArr[1],
 
-				aX = segArr[2],
-				aY = segArr[3],
+			aX = segArr[2],
+			aY = segArr[3],
 
-				bX = segArr[4],
-				bY = segArr[5],
+			bX = segArr[4],
+			bY = segArr[5],
 
-				velX = segArr[6],
-				velY = segArr[7],
-			}
-		)
+			velX = segArr[6],
+			velY = segArr[7],
+		}
 	end
 
 	return snap
