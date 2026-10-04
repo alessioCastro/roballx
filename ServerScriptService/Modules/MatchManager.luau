@@ -57,6 +57,59 @@ local function getObjectCenter(object: any): Vector2?
 end
 
 ----------------------------------------------------
+-- RESET DE OBJETOS DO MAPA
+----------------------------------------------------
+
+local function resetMapObject(
+	runtimeObject: any,
+	mapObjects: { any }
+)
+	if runtimeObject.resettable == false then
+		return
+	end
+
+	if not runtimeObject.id then
+		return
+	end
+
+	for _, mapObject in ipairs(mapObjects) do
+		local mapObjectId =
+			mapObject.id
+
+		if mapObjectId == runtimeObject.id then
+
+			------------------------------------------------
+			-- DISC / SHAPE
+			------------------------------------------------
+
+			if mapObject.pos then
+				runtimeObject.pos =
+					mapObject.pos
+			end
+
+			------------------------------------------------
+			-- SEGMENT
+			------------------------------------------------
+
+			if mapObject.a
+				and mapObject.b
+			then
+				runtimeObject.a =
+					mapObject.a
+
+				runtimeObject.b =
+					mapObject.b
+			end
+
+			runtimeObject.vel =
+				Vector2.zero
+
+			break
+		end
+	end
+end
+
+----------------------------------------------------
 -- CHECAR PONTUAÇÃO
 ----------------------------------------------------
 
@@ -97,15 +150,17 @@ function MatchManager.CheckGoals(
 	end
 
 	for _, goal in ipairs(scoring) do
-		local object = findObject(
-			goal.object,
-			discs,
-			segments,
-			shapes
-		)
+		local object =
+			findObject(
+				goal.object,
+				discs,
+				segments,
+				shapes
+			)
 
 		if object then
-			local objectCenter = getObjectCenter(object)
+			local objectCenter =
+				getObjectCenter(object)
 
 			if objectCenter then
 				if objectCenter.X >= goal.min.X
@@ -113,13 +168,17 @@ function MatchManager.CheckGoals(
 					and objectCenter.Y >= goal.min.Y
 					and objectCenter.Y <= goal.max.Y
 				then
+
 					if goal.team == "Red" then
 						scoreRed += 1
+
 					elseif goal.team == "Blue" then
 						scoreBlue += 1
 					end
 
-					resetCountdown = RESET_DELAY_TICKS
+					resetCountdown =
+						RESET_DELAY_TICKS
+
 					return true
 				end
 			end
@@ -140,92 +199,110 @@ function MatchManager.ResetPositions(
 	segments: { any },
 	shapes: { any }
 )
-	local gameplay = map.gameplay
+	local gameplay =
+		map.gameplay
 
 	if not gameplay then
 		return
 	end
 
 	------------------------------------------------
-	-- RESET DOS PLAYERS
+	-- PLAYERS
 	------------------------------------------------
 
-	local playerGameplay = gameplay.player
+	local playerGameplay =
+		gameplay.player
 
-	if playerGameplay and playerGameplay.spawn then
+	if playerGameplay
+		and playerGameplay.spawn
+	then
+
 		for _, pData in pairs(playersData) do
-			local spawnPosition =
-				pData.team == "Red"
-				and playerGameplay.spawn.Red
-				or playerGameplay.spawn.Blue
 
-			if pData.kind == "segment" then
-				if pData.a and pData.b then
-					local currentCenter = (pData.a + pData.b) * 0.5
-					local delta = spawnPosition - currentCenter
+			local spawnPositions
 
-					pData.a += delta
-					pData.b += delta
-					pData.pos = spawnPosition
-				end
+			if pData.team == "Red" then
+				spawnPositions =
+					playerGameplay.spawn.team1Positions
 			else
-				pData.pos = spawnPosition
+				spawnPositions =
+					playerGameplay.spawn.team2Positions
 			end
 
-			pData.vel = Vector2.zero
-			pData.input = Vector2.zero
-			pData.isKicking = false
-			pData.lastKickTick = -9999
+			local spawnIndex =
+				pData.spawnIndex
+
+			if spawnIndex
+				and spawnPositions
+			then
+				local spawnPosition =
+					spawnPositions[spawnIndex]
+
+				if spawnPosition then
+
+					if pData.kind == "segment" then
+						if pData.a
+							and pData.b
+						then
+							local currentCenter =
+								(pData.a + pData.b) * 0.5
+
+							local delta =
+								spawnPosition
+							- currentCenter
+
+							pData.a += delta
+							pData.b += delta
+
+							pData.pos =
+								spawnPosition
+						end
+					else
+						pData.pos =
+							spawnPosition
+					end
+				end
+			end
+
+			pData.vel =
+				Vector2.zero
+
+			pData.input =
+				Vector2.zero
+
+			pData.isKicking =
+				false
+
+			pData.lastKickTick =
+				-9999
 		end
 	end
 
 	------------------------------------------------
-	-- RESET DOS OBJETOS CHUTÁVEIS
+	-- OBJETOS DO MAPA
+	--
+	-- resettable é independente de kickable.
 	------------------------------------------------
 
-	local kickable = gameplay.kickable
-
-	if not kickable then
-		return
+	for _, object in ipairs(discs) do
+		resetMapObject(
+			object,
+			map.discs
+		)
 	end
 
-	for _, id in ipairs(kickable) do
-		for _, object in ipairs(discs) do
-			if object.id == id then
-				for _, mapObject in ipairs(map.discs) do
-					if mapObject.id == id then
-						object.pos = mapObject.pos
-						object.vel = Vector2.zero
-						break
-					end
-				end
-			end
-		end
+	for _, object in ipairs(segments) do
+		resetMapObject(
+			object,
+			map.segments
+		)
+	end
 
-		for _, object in ipairs(shapes) do
-			if object.id == id then
-				for _, mapObject in ipairs(map.shapes) do
-					if mapObject.id == id then
-						object.pos = mapObject.pos
-						object.vel = Vector2.zero
-						break
-					end
-				end
-			end
-		end
-
-		for _, object in ipairs(segments) do
-			if object.id == id then
-				for _, mapObject in ipairs(map.segments) do
-					if mapObject.id == id then
-						object.a = mapObject.a
-						object.b = mapObject.b
-						object.vel = Vector2.zero
-						break
-					end
-				end
-			end
-		end
+	for _, object in ipairs(shapes) do
+		resetMapObject(
+			object,
+			map.shapes
+		)
 	end
 end
 
