@@ -15,6 +15,7 @@ export type CircleObject = {
 	isStatic: boolean?,
 	isSolid: boolean?,
 	damping: number?,
+	resettable: boolean?,
 	team: string?,
 	input: Vector2?,
 	isKicking: boolean?,
@@ -33,6 +34,7 @@ export type Segment = {
 	isStatic: boolean?,
 	isSolid: boolean?,
 	damping: number?,
+	resettable: boolean?,
 	thickness: number?,
 	ignoreCapA: boolean?,
 	ignoreCapB: boolean?,
@@ -52,6 +54,7 @@ export type PhysicalShape = {
 	isStatic: boolean?,
 	isSolid: boolean?,
 	damping: number?,
+	resettable: boolean?,
 	cGroup: number?,
 	cMask: number?,
 
@@ -89,6 +92,7 @@ export type PlayerObject = {
 	damping: number?,
 
 	team: string?,
+	spawnIndex: number?,
 	input: Vector2?,
 	isKicking: boolean?,
 	lastKickTick: number?,
