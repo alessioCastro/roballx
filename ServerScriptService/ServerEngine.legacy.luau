@@ -8,7 +8,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local replicatedModules = ReplicatedStorage:WaitForChild("Modules")
-local replicatedGameRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
+local replicatedGameRemotes =
+	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
 local serverModules = script.Parent.Modules
 
 local MapData = require(replicatedModules:WaitForChild("MapData"))
@@ -17,10 +18,15 @@ local GameState = require(replicatedModules:WaitForChild("GameState"))
 local InputBuffer = require(replicatedModules:WaitForChild("InputBuffer"))
 local MatchManager = require(serverModules:WaitForChild("MatchManager"))
 
-local gameInputEvent = replicatedGameRemotes:WaitForChild("GameInput")
+local gameInputEvent =
+	replicatedGameRemotes:WaitForChild("GameInput")
 
--- Criar RemoteEvent para snapshots se não existir
-local gameSnapshotEvent = replicatedGameRemotes:FindFirstChild("GameSnapshot")
+----------------------------------------------------
+-- SNAPSHOT REMOTE
+----------------------------------------------------
+
+local gameSnapshotEvent =
+	replicatedGameRemotes:FindFirstChild("GameSnapshot")
 
 if not gameSnapshotEvent then
 	gameSnapshotEvent = Instance.new("UnreliableRemoteEvent")
@@ -78,14 +84,16 @@ local function buildBitmask(
 end
 
 ----------------------------------------------------
--- OBJETO DE PLAYER
+-- CONFIGURAÇÃO DO PLAYER
 ----------------------------------------------------
 
 local playerGameplay = currentMap.gameplay.player
 local playerObjectId = playerGameplay.object
 
 if typeof(playerObjectId) ~= "string" then
-	error("MapData.gameplay.player.object precisa ser um ID de objeto válido.")
+	error(
+		"MapData.gameplay.player.object precisa ser um ID de objeto válido."
+	)
 end
 
 ----------------------------------------------------
@@ -103,6 +111,16 @@ local function processSegments(
 	end
 
 	for idx, seg in ipairs(rawSegments) do
+
+		------------------------------------------------
+		-- O SEGMENTO USADO COMO PLAYER É APENAS
+		-- UM MOLDE E NÃO DEVE ENTRAR NO MUNDO.
+		------------------------------------------------
+
+		if seg.id == playerObjectId then
+			continue
+		end
+
 		local curve = seg.curve or 0
 
 		if curve == 0 then
@@ -194,13 +212,19 @@ end
 local playersData: {[number]: PhysicsEngine.PlayerObject} = {}
 local sortedUserIds: {number} = {}
 
+----------------------------------------------------
+-- DISCS
+----------------------------------------------------
+
 local discs: {PhysicsEngine.CircleObject} = {}
 
 if currentMap.discs then
 	for idx, disc in ipairs(currentMap.discs) do
+
 		-- O objeto referenciado por gameplay.player.object
-		-- é um molde do corpo do jogador e não deve existir
+		-- é um molde do corpo do jogador e não existe
 		-- simultaneamente como objeto independente do mapa.
+
 		if disc.id ~= playerObjectId then
 			discs[#discs + 1] = {
 				id = disc.id or ("disc_" .. idx),
@@ -240,9 +264,10 @@ local shapes: {PhysicsEngine.PhysicalShape} = {}
 
 if currentMap.shapes then
 	for idx, shape in ipairs(currentMap.shapes) do
-		-- Assim como no caso dos discs, um shape que seja
-		-- o corpo do player é tratado como molde, não como
-		-- objeto independente do mapa.
+
+		-- O shape usado como corpo do player é apenas
+		-- um molde, não um objeto independente do mapa.
+
 		if shape.id ~= playerObjectId then
 			local cornerPx = 0
 
@@ -294,7 +319,7 @@ if currentMap.shapes then
 end
 
 ----------------------------------------------------
--- OBJETOS DE MAPA POR ID
+-- OBJETOS DO MAPA POR ID
 ----------------------------------------------------
 
 local objectsById: {[string]: any} = {}
@@ -818,6 +843,7 @@ RunService.Heartbeat:Connect(function(dt)
 		math.min(dt, 0.1)
 
 	while accumulator >= FIXED_DT do
+
 		------------------------------------------------
 		-- 1. INPUT
 		------------------------------------------------
