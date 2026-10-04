@@ -430,7 +430,6 @@ RunService.Heartbeat:Connect(function(dt)
 		local scoreRed, scoreBlue = MatchManager.GetScore()
 		local packed = GameState.packLiveState(
 			currentTick,
-			ball,
 			playersData,
 			dynamicDiscs,
 			dynamicSegments,
