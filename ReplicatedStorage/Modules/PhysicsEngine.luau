@@ -620,7 +620,7 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 			if velAlongNormal < 0 then
 				sB.vel =
 					velB
-				- (1 + (sB.restitution or 0.2))
+					- (1 + (sB.restitution or 0.2))
 					* velAlongNormal
 					* normal
 			end
@@ -635,7 +635,7 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 			if velAlongNormal > 0 then
 				sA.vel =
 					velA
-				- (1 + (sA.restitution or 0.2))
+					- (1 + (sA.restitution or 0.2))
 					* velAlongNormal
 					* normal
 			end
@@ -737,7 +737,7 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 
 				shape.vel =
 					shapeVel
-				- (1 + e)
+					- (1 + e)
 					* velAlongNormal
 					* normal
 			end
@@ -895,8 +895,7 @@ function PhysicsEngine.resolveCircleCollision(
 		)
 
 		local relativeVel = b.vel - a.vel
-		local velAlongNormal =
-			relativeVel:Dot(normal)
+		local velAlongNormal = relativeVel:Dot(normal)
 
 		if velAlongNormal < 0 then
 			local speed = relativeVel.Magnitude
@@ -931,12 +930,12 @@ end
 function PhysicsEngine.tryKick(
 	pData: CircleObject,
 	kickableObjects: {CircleObject},
-	phys: any,
+	kickPhys: any,
 	currentTick: number
 )
 	local kickCooldownTicks =
 		math.ceil(
-			phys.cooldown * 60
+			kickPhys.cooldown * 60
 		)
 
 	if currentTick - (pData.lastKickTick or -9999)
@@ -956,8 +955,8 @@ function PhysicsEngine.tryKick(
 			if dist <= (
 				pData.radius
 					+ object.radius
-					+ phys.rangeExtra
-				) then
+					+ kickPhys.rangeExtra
+			) then
 
 				pData.lastKickTick =
 					currentTick
@@ -968,7 +967,7 @@ function PhysicsEngine.tryKick(
 					or Vector2.new(1, 0)
 
 				object.vel +=
-					kickDir * phys.force
+					kickDir * kickPhys.force
 			end
 		end
 	end
@@ -1060,11 +1059,14 @@ function PhysicsEngine.Step(
 	collisionSegments,
 	collisionShapes,
 	broadphase,
-	phys,
+	gameplay,
 	kickableObjects,
 	fixedDt,
 	currentTick
 )
+	local playerPhys = gameplay.player
+	local kickPhys = gameplay.kick
+
 	PhysicsEngine.rebuildPlayerBroadphase(
 		broadphase,
 		playersData,
@@ -1080,7 +1082,7 @@ function PhysicsEngine.Step(
 
 		if pData then
 			local decelFactor =
-				phys.decelFactor or 0.88
+				playerPhys.decelFactor or 0.88
 
 			pData.vel *= decelFactor
 
@@ -1095,7 +1097,7 @@ function PhysicsEngine.Step(
 
 				local force =
 					pData.input.Unit
-					* (phys.accel * mass)
+					* (playerPhys.accel * mass)
 
 				local acceleration =
 					force / mass
@@ -1106,7 +1108,7 @@ function PhysicsEngine.Step(
 
 			local friction =
 				math.clamp(
-					phys.friction or 1,
+					playerPhys.friction or 1,
 					0,
 					1
 				)
@@ -1124,7 +1126,7 @@ function PhysicsEngine.Step(
 				PhysicsEngine.tryKick(
 					pData,
 					kickableObjects,
-					phys,
+					kickPhys,
 					currentTick
 				)
 			end
