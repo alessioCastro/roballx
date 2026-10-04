@@ -929,7 +929,7 @@ end
 
 function PhysicsEngine.tryKick(
 	pData: CircleObject,
-	kickableObjects: {CircleObject},
+	kickableObjects: { any },
 	kickPhys: any,
 	currentTick: number
 )
@@ -945,18 +945,59 @@ function PhysicsEngine.tryKick(
 	end
 
 	for _, object in ipairs(kickableObjects) do
-		if object.isStatic ~= true then
+		if object.isStatic ~= true and object.vel then
+
+			local objectCenter: Vector2
+			local objectRadius: number
+
+			------------------------------------------------
+			-- DISC / CIRCLE
+			------------------------------------------------
+
+			if object.pos and object.radius then
+				objectCenter = object.pos
+				objectRadius = object.radius
+
+				------------------------------------------------
+				-- SHAPE
+				------------------------------------------------
+
+			elseif object.pos and object.size then
+				objectCenter = object.pos
+
+				objectRadius =
+					math.sqrt(
+						(object.size.X * 0.5) ^ 2
+						+ (object.size.Y * 0.5) ^ 2
+					)
+
+				------------------------------------------------
+				-- SEGMENT
+				------------------------------------------------
+
+			elseif object.a and object.b then
+				objectCenter =
+					(object.a + object.b) * 0.5
+
+				objectRadius =
+					(object.b - object.a).Magnitude * 0.5
+					+ ((object.thickness or 0) * 0.5)
+
+			else
+				continue
+			end
+
 			local delta =
-				object.pos - pData.pos
+				objectCenter - pData.pos
 
 			local dist =
 				delta.Magnitude
 
 			if dist <= (
 				pData.radius
-					+ object.radius
+					+ objectRadius
 					+ kickPhys.rangeExtra
-			) then
+				) then
 
 				pData.lastKickTick =
 					currentTick
