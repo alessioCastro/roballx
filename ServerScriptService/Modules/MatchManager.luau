@@ -41,6 +41,22 @@ local function findObject(
 end
 
 ----------------------------------------------------
+-- CENTRO DE UM OBJETO
+----------------------------------------------------
+
+local function getObjectCenter(object: any): Vector2?
+	if object.pos then
+		return object.pos
+	end
+
+	if object.a and object.b then
+		return (object.a + object.b) * 0.5
+	end
+
+	return nil
+end
+
+----------------------------------------------------
 -- CHECAR PONTUAÇÃO
 ----------------------------------------------------
 
@@ -88,20 +104,24 @@ function MatchManager.CheckGoals(
 			shapes
 		)
 
-		if object and object.pos then
-			if object.pos.X >= goal.min.X
-				and object.pos.X <= goal.max.X
-				and object.pos.Y >= goal.min.Y
-				and object.pos.Y <= goal.max.Y
-			then
-				if goal.team == "Red" then
-					scoreRed += 1
-				elseif goal.team == "Blue" then
-					scoreBlue += 1
-				end
+		if object then
+			local objectCenter = getObjectCenter(object)
 
-				resetCountdown = RESET_DELAY_TICKS
-				return true
+			if objectCenter then
+				if objectCenter.X >= goal.min.X
+					and objectCenter.X <= goal.max.X
+					and objectCenter.Y >= goal.min.Y
+					and objectCenter.Y <= goal.max.Y
+				then
+					if goal.team == "Red" then
+						scoreRed += 1
+					elseif goal.team == "Blue" then
+						scoreBlue += 1
+					end
+
+					resetCountdown = RESET_DELAY_TICKS
+					return true
+				end
 			end
 		end
 	end
@@ -134,10 +154,23 @@ function MatchManager.ResetPositions(
 
 	if playerGameplay and playerGameplay.spawn then
 		for _, pData in pairs(playersData) do
-			pData.pos =
+			local spawnPosition =
 				pData.team == "Red"
 				and playerGameplay.spawn.Red
 				or playerGameplay.spawn.Blue
+
+			if pData.kind == "segment" then
+				if pData.a and pData.b then
+					local currentCenter = (pData.a + pData.b) * 0.5
+					local delta = spawnPosition - currentCenter
+
+					pData.a += delta
+					pData.b += delta
+					pData.pos = spawnPosition
+				end
+			else
+				pData.pos = spawnPosition
+			end
 
 			pData.vel = Vector2.zero
 			pData.input = Vector2.zero
