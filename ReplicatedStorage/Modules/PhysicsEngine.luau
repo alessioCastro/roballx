@@ -307,7 +307,10 @@ function PhysicsEngine.rebuildPlayerBroadphase(
 	end
 end
 
--- Checagem de colisão por bitmask
+----------------------------------------------------
+-- COLISÃO POR BITMASK
+----------------------------------------------------
+
 local function canCollide(a: any, b: any): boolean
 	local groupA = a.cGroup or DEFAULT_MASK
 	local maskA = a.cMask or DEFAULT_MASK
@@ -318,11 +321,18 @@ local function canCollide(a: any, b: any): boolean
 end
 
 local function rotateVector(v: Vector2, angleDegrees: number): Vector2
-	if angleDegrees == 0 then return v end
+	if angleDegrees == 0 then
+		return v
+	end
+
 	local rad = math.rad(angleDegrees)
 	local cos = math.cos(rad)
 	local sin = math.sin(rad)
-	return Vector2.new(v.X * cos - v.Y * sin, v.X * sin + v.Y * cos)
+
+	return Vector2.new(
+		v.X * cos - v.Y * sin,
+		v.X * sin + v.Y * cos
+	)
 end
 
 function PhysicsEngine.prepareShape(shape: PhysicalShape)
@@ -352,28 +362,60 @@ function PhysicsEngine.prepareShape(shape: PhysicalShape)
 	shape.segmentRadius = radius
 end
 
-local function closestPointOnSegment(p: Vector2, a: Vector2, b: Vector2): Vector2
+local function closestPointOnSegment(
+	p: Vector2,
+	a: Vector2,
+	b: Vector2
+): Vector2
 	local ab = b - a
 	local ab2 = ab:Dot(ab)
-	if ab2 == 0 then return a end
-	local t = math.clamp((p - a):Dot(ab) / ab2, 0, 1)
+
+	if ab2 == 0 then
+		return a
+	end
+
+	local t = math.clamp(
+		(p - a):Dot(ab) / ab2,
+		0,
+		1
+	)
+
 	return a + ab * t
 end
 
-local function getShapeSegment(shape: PhysicalShape): (Vector2, Vector2, number)
-	return shape.pos + shape.segmentP1, shape.pos + shape.segmentP2, shape.segmentRadius
+local function getShapeSegment(
+	shape: PhysicalShape
+): (Vector2, Vector2, number)
+	return
+		shape.pos + shape.segmentP1,
+		shape.pos + shape.segmentP2,
+		shape.segmentRadius
 end
 
-local function getClosestPointsBetweenSegments(a1: Vector2, a2: Vector2, b1: Vector2, b2: Vector2): (Vector2, Vector2, number)
+local function getClosestPointsBetweenSegments(
+	a1: Vector2,
+	a2: Vector2,
+	b1: Vector2,
+	b2: Vector2
+): (Vector2, Vector2, number)
 
 	local bestA = a1
-	local bestB = closestPointOnSegment(a1, b1, b2)
+	local bestB = closestPointOnSegment(
+		a1,
+		b1,
+		b2
+	)
 
 	local delta = bestB - bestA
 	local minDistSq = delta:Dot(delta)
 
 	local pA = a2
-	local pB = closestPointOnSegment(a2, b1, b2)
+	local pB = closestPointOnSegment(
+		a2,
+		b1,
+		b2
+	)
+
 	delta = pB - pA
 	local distSq = delta:Dot(delta)
 
@@ -383,8 +425,14 @@ local function getClosestPointsBetweenSegments(a1: Vector2, a2: Vector2, b1: Vec
 		bestB = pB
 	end
 
-	pA = closestPointOnSegment(b1, a1, a2)
+	pA = closestPointOnSegment(
+		b1,
+		a1,
+		a2
+	)
+
 	pB = b1
+
 	delta = pB - pA
 	distSq = delta:Dot(delta)
 
@@ -394,8 +442,14 @@ local function getClosestPointsBetweenSegments(a1: Vector2, a2: Vector2, b1: Vec
 		bestB = pB
 	end
 
-	pA = closestPointOnSegment(b2, a1, a2)
+	pA = closestPointOnSegment(
+		b2,
+		a1,
+		a2
+	)
+
 	pB = b2
+
 	delta = pB - pA
 	distSq = delta:Dot(delta)
 
@@ -411,26 +465,46 @@ end
 ----------------------------------------------------
 -- 1. CÍRCULO VS SHAPE
 ----------------------------------------------------
-function PhysicsEngine.resolveShapeCollision(obj: CircleObject, shape: PhysicalShape)
-	if not canCollide(obj, shape) then return end
-	if shape.isSolid == false or obj.isSolid == false then return end
+
+function PhysicsEngine.resolveShapeCollision(
+	obj: CircleObject,
+	shape: PhysicalShape
+)
+	if not canCollide(obj, shape) then
+		return
+	end
+
+	if shape.isSolid == false or obj.isSolid == false then
+		return
+	end
 
 	local shapeVel = shape.vel or Vector2.zero
 	local shapeMass = shape.mass or 1
-	local shapeIsStatic = (shape.isStatic ~= false)
-	local objIsStatic = (obj.isStatic == true)
+	local shapeIsStatic = shape.isStatic ~= false
+	local objIsStatic = obj.isStatic == true
 
-	if shapeIsStatic and objIsStatic then return end
+	if shapeIsStatic and objIsStatic then
+		return
+	end
 
 	local s1, s2, shapeRad = getShapeSegment(shape)
-	local closestOnSeg = closestPointOnSegment(obj.pos, s1, s2)
+
+	local closestOnSeg = closestPointOnSegment(
+		obj.pos,
+		s1,
+		s2
+	)
 
 	local delta = obj.pos - closestOnSeg
 	local dist = delta.Magnitude
 	local minDist = obj.radius + shapeRad
 
 	if dist < minDist then
-		local normal = dist > 0.0001 and (delta / dist) or Vector2.new(0, 1)
+		local normal =
+			dist > 0.0001
+			and (delta / dist)
+			or Vector2.new(0, 1)
+
 		local overlap = minDist - dist
 
 		if shapeIsStatic then
@@ -439,22 +513,45 @@ function PhysicsEngine.resolveShapeCollision(obj: CircleObject, shape: PhysicalS
 			shape.pos -= normal * overlap
 		else
 			local totalMass = obj.mass + shapeMass
-			obj.pos += normal * (overlap * (shapeMass / totalMass))
-			shape.pos -= normal * (overlap * (obj.mass / totalMass))
+
+			obj.pos += normal * (
+				overlap * (shapeMass / totalMass)
+			)
+
+			shape.pos -= normal * (
+				overlap * (obj.mass / totalMass)
+			)
 		end
 
 		local relVel = obj.vel - shapeVel
 		local velAlongNormal = relVel:Dot(normal)
 
 		if velAlongNormal < 0 then
-			local e = math.min(obj.restitution, shape.restitution or 0.2)
+			local e = math.min(
+				obj.restitution,
+				shape.restitution or 0.2
+			)
+
 			if shapeIsStatic then
-				obj.vel -= (1 + e) * velAlongNormal * normal
+				obj.vel -= (
+					1 + e
+				) * velAlongNormal * normal
+
 			elseif objIsStatic then
-				shape.vel = shapeVel + (1 + e) * velAlongNormal * normal
+				shape.vel =
+					shapeVel
+					+ (1 + e)
+					* velAlongNormal
+					* normal
+
 			else
-				local impulseMag = -(1 + e) * velAlongNormal / (1/obj.mass + 1/shapeMass)
+				local impulseMag =
+					-(1 + e)
+					* velAlongNormal
+					/ (1 / obj.mass + 1 / shapeMass)
+
 				local impulse = normal * impulseMag
+
 				obj.vel += impulse / obj.mass
 				shape.vel = shapeVel - impulse / shapeMass
 			end
@@ -463,59 +560,115 @@ function PhysicsEngine.resolveShapeCollision(obj: CircleObject, shape: PhysicalS
 end
 
 ----------------------------------------------------
--- 2. SHAPE VS SHAPE (CÁPSULA VS CÁPSULA)
+-- 2. SHAPE VS SHAPE
 ----------------------------------------------------
-function PhysicsEngine.resolveShapeVsShapeCollision(sA: PhysicalShape, sB: PhysicalShape)
-	if not canCollide(sA, sB) then return end
-	if sA.isSolid == false or sB.isSolid == false then return end
 
-	local aIsStatic = (sA.isStatic ~= false)
-	local bIsStatic = (sB.isStatic ~= false)
-	if aIsStatic and bIsStatic then return end
+function PhysicsEngine.resolveShapeVsShapeCollision(
+	sA: PhysicalShape,
+	sB: PhysicalShape
+)
+	if not canCollide(sA, sB) then
+		return
+	end
+
+	if sA.isSolid == false or sB.isSolid == false then
+		return
+	end
+
+	local aIsStatic = sA.isStatic ~= false
+	local bIsStatic = sB.isStatic ~= false
+
+	if aIsStatic and bIsStatic then
+		return
+	end
 
 	local a1, a2, radA = getShapeSegment(sA)
 	local b1, b2, radB = getShapeSegment(sB)
 
-	local pA, pB, dist = getClosestPointsBetweenSegments(a1, a2, b1, b2)
+	local pA, pB, dist =
+		getClosestPointsBetweenSegments(
+			a1,
+			a2,
+			b1,
+			b2
+		)
+
 	local minDist = radA + radB
 
 	if dist < minDist then
 		local delta = pB - pA
-		local normal = dist > 0.0001 and (delta / dist) or Vector2.new(0, 1)
+
+		local normal =
+			dist > 0.0001
+			and (delta / dist)
+			or Vector2.new(0, 1)
+
 		local overlap = minDist - dist
 
 		local massA = sA.mass or 1
 		local massB = sB.mass or 1
+
 		local velA = sA.vel or Vector2.zero
 		local velB = sB.vel or Vector2.zero
 
 		if aIsStatic then
 			sB.pos += normal * overlap
-			local velAlongNormal = velB:Dot(normal)
+
+			local velAlongNormal =
+				velB:Dot(normal)
+
 			if velAlongNormal < 0 then
-				sB.vel = velB - (1 + (sB.restitution or 0.2)) * velAlongNormal * normal
+				sB.vel =
+					velB
+				- (1 + (sB.restitution or 0.2))
+					* velAlongNormal
+					* normal
 			end
+
 			return
 		elseif bIsStatic then
 			sA.pos -= normal * overlap
-			local velAlongNormal = velA:Dot(normal)
+
+			local velAlongNormal =
+				velA:Dot(normal)
+
 			if velAlongNormal > 0 then
-				sA.vel = velA - (1 + (sA.restitution or 0.2)) * velAlongNormal * normal
+				sA.vel =
+					velA
+				- (1 + (sA.restitution or 0.2))
+					* velAlongNormal
+					* normal
 			end
+
 			return
 		end
 
 		local totalMass = massA + massB
-		sA.pos -= normal * (overlap * (massB / totalMass))
-		sB.pos += normal * (overlap * (massA / totalMass))
+
+		sA.pos -= normal * (
+			overlap * (massB / totalMass)
+		)
+
+		sB.pos += normal * (
+			overlap * (massA / totalMass)
+		)
 
 		local relVel = velB - velA
 		local velAlongNormal = relVel:Dot(normal)
 
 		if velAlongNormal < 0 then
-			local e = math.min(sA.restitution or 0.2, sB.restitution or 0.2)
-			local impulseMag = -(1 + e) * velAlongNormal / (1/massA + 1/massB)
+			local e = math.min(
+				sA.restitution or 0.2,
+				sB.restitution or 0.2
+			)
+
+			local impulseMag =
+				-(1 + e)
+				* velAlongNormal
+				/ (1 / massA + 1 / massB)
+
 			local impulse = normal * impulseMag
+
 			sA.vel = velA - impulse / massA
 			sB.vel = velB + impulse / massB
 		end
@@ -523,36 +676,72 @@ function PhysicsEngine.resolveShapeVsShapeCollision(sA: PhysicalShape, sB: Physi
 end
 
 ----------------------------------------------------
--- 3. SHAPE VS SEGMENT (CÁPSULA VS LINHAS/PAREDES)
+-- 3. SHAPE VS SEGMENT
 ----------------------------------------------------
-function PhysicsEngine.resolveShapeVsSegmentCollision(shape: PhysicalShape, seg: Segment)
-	if not canCollide(shape, seg) then return end
-	if shape.isSolid == false or seg.isSolid == false then return end
 
-	local shape1, shape2, shapeRad = getShapeSegment(shape)
+function PhysicsEngine.resolveShapeVsSegmentCollision(
+	shape: PhysicalShape,
+	seg: Segment
+)
+	if not canCollide(shape, seg) then
+		return
+	end
+
+	if shape.isSolid == false or seg.isSolid == false then
+		return
+	end
+
+	local shape1, shape2, shapeRad =
+		getShapeSegment(shape)
+
 	local segRad = (seg.thickness or 2) / 2
 
-	local pShape, pSeg, dist = getClosestPointsBetweenSegments(shape1, shape2, seg.a, seg.b)
+	local pShape, pSeg, dist =
+		getClosestPointsBetweenSegments(
+			shape1,
+			shape2,
+			seg.a,
+			seg.b
+		)
+
 	local minDist = shapeRad + segRad
 
 	if dist < minDist then
 		local delta = pShape - pSeg
-		local normal = dist > 0.0001 and (delta / dist) or Vector2.new(0, 1)
+
+		local normal =
+			dist > 0.0001
+			and (delta / dist)
+			or Vector2.new(0, 1)
+
 		local overlap = minDist - dist
 
-		local shapeIsStatic = (shape.isStatic ~= false)
-		local segIsStatic = (seg.isStatic ~= false)
+		local shapeIsStatic = shape.isStatic ~= false
+		local segIsStatic = seg.isStatic ~= false
+
 		local shapeVel = shape.vel or Vector2.zero
 		local segVel = seg.vel or Vector2.zero
 
 		if segIsStatic and not shapeIsStatic then
 			shape.pos += normal * overlap
+
 			local relVel = shapeVel - segVel
-			local velAlongNormal = relVel:Dot(normal)
+			local velAlongNormal =
+				relVel:Dot(normal)
+
 			if velAlongNormal < 0 then
-				local e = math.min(shape.restitution or 0.2, seg.restitution or 0.2)
-				shape.vel = shapeVel - (1 + e) * velAlongNormal * normal
+				local e = math.min(
+					shape.restitution or 0.2,
+					seg.restitution or 0.2
+				)
+
+				shape.vel =
+					shapeVel
+				- (1 + e)
+					* velAlongNormal
+					* normal
 			end
+
 		elseif shapeIsStatic and not segIsStatic then
 			seg.a -= normal * overlap
 			seg.b -= normal * overlap
@@ -563,20 +752,39 @@ end
 ----------------------------------------------------
 -- 4. CÍRCULO VS SEGMENTO
 ----------------------------------------------------
-function PhysicsEngine.resolveSegmentCollision(obj: CircleObject, seg: Segment)
-	if not canCollide(obj, seg) then return end
-	if seg.isSolid == false or obj.isSolid == false then return end
+
+function PhysicsEngine.resolveSegmentCollision(
+	obj: CircleObject,
+	seg: Segment
+)
+	if not canCollide(obj, seg) then
+		return
+	end
+
+	if seg.isSolid == false or obj.isSolid == false then
+		return
+	end
 
 	local ab = seg.b - seg.a
 	local ap = obj.pos - seg.a
 	local ab2 = ab:Dot(ab)
-	if ab2 == 0 then return end
+
+	if ab2 == 0 then
+		return
+	end
 
 	local t = ap:Dot(ab) / ab2
-	if seg.ignoreCapA and t < 0 then return end
-	if seg.ignoreCapB and t > 1 then return end
+
+	if seg.ignoreCapA and t < 0 then
+		return
+	end
+
+	if seg.ignoreCapB and t > 1 then
+		return
+	end
 
 	t = math.clamp(t, 0, 1)
+
 	local closest = seg.a + ab * t
 	local delta = obj.pos - closest
 	local dist = delta.Magnitude
@@ -584,26 +792,44 @@ function PhysicsEngine.resolveSegmentCollision(obj: CircleObject, seg: Segment)
 	if dist < obj.radius and dist > 0 then
 		local normal = delta / dist
 		local overlap = obj.radius - dist
+
 		local segVel = seg.vel or Vector2.zero
-		local segIsStatic = (seg.isStatic ~= false)
+		local segIsStatic = seg.isStatic ~= false
 
 		if segIsStatic then
 			obj.pos += normal * overlap
-			local velAlongNormal = (obj.vel - segVel):Dot(normal)
+
+			local velAlongNormal =
+				(obj.vel - segVel):Dot(normal)
+
 			if velAlongNormal < 0 then
-				local bounce = obj.restitution + (seg.restitution or 0.1)
-				obj.vel -= (1 + bounce) * velAlongNormal * normal
+				local bounce =
+					obj.restitution
+					+ (seg.restitution or 0.1)
+
+				obj.vel -= (
+					1 + bounce
+				) * velAlongNormal * normal
 			end
 		end
 	end
 end
 
 ----------------------------------------------------
--- 5. CÍRCULO VS CÍRCULO (CORRIGIDO)
+-- 5. CÍRCULO VS CÍRCULO
 ----------------------------------------------------
-function PhysicsEngine.resolveCircleCollision(a: CircleObject, b: CircleObject)
-	if not canCollide(a, b) then return end
-	if a.isSolid == false or b.isSolid == false then return end
+
+function PhysicsEngine.resolveCircleCollision(
+	a: CircleObject,
+	b: CircleObject
+)
+	if not canCollide(a, b) then
+		return
+	end
+
+	if a.isSolid == false or b.isSolid == false then
+		return
+	end
 
 	local delta = b.pos - a.pos
 	local dist = delta.Magnitude
@@ -613,76 +839,154 @@ function PhysicsEngine.resolveCircleCollision(a: CircleObject, b: CircleObject)
 		local normal = delta / dist
 		local overlap = minDist - dist
 
-		local aIsStatic = (a.isStatic == true)
-		local bIsStatic = (b.isStatic == true)
+		local aIsStatic = a.isStatic == true
+		local bIsStatic = b.isStatic == true
 
-		if aIsStatic and bIsStatic then return end
-
-		-- Se 'a' for estático e 'b' dinâmico (ex: Trave = a, Bola = b)
-		if aIsStatic then
-			b.pos += normal * overlap
-			local velAlongNormal = b.vel:Dot(normal)
-			if velAlongNormal < 0 then
-				local e = math.min(a.restitution or 0.5, b.restitution or 0.5)
-				b.vel -= (1 + e) * velAlongNormal * normal
-			end
-			return
-				-- Se 'b' for estático e 'a' dinâmico (ex: Bola = a, Trave = b)
-		elseif bIsStatic then
-			a.pos -= normal * overlap
-			local velAlongNormal = a.vel:Dot(normal)
-			if velAlongNormal > 0 then
-				local e = math.min(a.restitution or 0.5, b.restitution or 0.5)
-				a.vel -= (1 + e) * velAlongNormal * normal
-			end
+		if aIsStatic and bIsStatic then
 			return
 		end
 
-		-- Colisão entre dois círculos dinâmicos
+		if aIsStatic then
+			b.pos += normal * overlap
+
+			local velAlongNormal =
+				b.vel:Dot(normal)
+
+			if velAlongNormal < 0 then
+				local e = math.min(
+					a.restitution or 0.5,
+					b.restitution or 0.5
+				)
+
+				b.vel -= (
+					1 + e
+				) * velAlongNormal * normal
+			end
+
+			return
+		elseif bIsStatic then
+			a.pos -= normal * overlap
+
+			local velAlongNormal =
+				a.vel:Dot(normal)
+
+			if velAlongNormal > 0 then
+				local e = math.min(
+					a.restitution or 0.5,
+					b.restitution or 0.5
+				)
+
+				a.vel -= (
+					1 + e
+				) * velAlongNormal * normal
+			end
+
+			return
+		end
+
 		local totalMass = a.mass + b.mass
-		a.pos -= normal * (overlap * (b.mass / totalMass))
-		b.pos += normal * (overlap * (a.mass / totalMass))
+
+		a.pos -= normal * (
+			overlap * (b.mass / totalMass)
+		)
+
+		b.pos += normal * (
+			overlap * (a.mass / totalMass)
+		)
 
 		local relativeVel = b.vel - a.vel
-		local velAlongNormal = relativeVel:Dot(normal)
+		local velAlongNormal =
+			relativeVel:Dot(normal)
 
 		if velAlongNormal < 0 then
 			local speed = relativeVel.Magnitude
-			local eBase = math.min(a.restitution, b.restitution)
-			local e = speed < 30 and (eBase * 0.2) or eBase
-			local impulseMagnitude = -(1 + e) * velAlongNormal / (1/a.mass + 1/b.mass)
+
+			local eBase = math.min(
+				a.restitution,
+				b.restitution
+			)
+
+			local e =
+				speed < 30
+				and (eBase * 0.2)
+				or eBase
+
+			local impulseMagnitude =
+				-(1 + e)
+				* velAlongNormal
+				/ (1 / a.mass + 1 / b.mass)
+
 			local impulse = normal * impulseMagnitude
+
 			a.vel -= impulse / a.mass
 			b.vel += impulse / b.mass
 		end
 	end
 end
 
-function PhysicsEngine.tryKick(pData: CircleObject, ball: CircleObject, phys: any, currentTick: number)
-	local kickCooldownTicks = math.ceil(phys.kickCooldown * 60) -- cooldown em ticks (60 ticks/s)
-	if currentTick - (pData.lastKickTick or -9999) < kickCooldownTicks then return end
+----------------------------------------------------
+-- KICK
+----------------------------------------------------
 
-	local delta = ball.pos - pData.pos
-	local dist = delta.Magnitude
-	if dist <= (pData.radius + ball.radius + phys.kickRangeExtra) then
-		pData.lastKickTick = currentTick
-		local kickDir = dist > 0 and delta.Unit or Vector2.new(1, 0)
-		ball.vel += kickDir * phys.kickForce
+function PhysicsEngine.tryKick(
+	pData: CircleObject,
+	kickableObjects: {CircleObject},
+	phys: any,
+	currentTick: number
+)
+	local kickCooldownTicks =
+		math.ceil(
+			phys.kickCooldown * 60
+		)
+
+	if currentTick - (pData.lastKickTick or -9999)
+		< kickCooldownTicks
+	then
+		return
+	end
+
+	for _, object in ipairs(kickableObjects) do
+		if object.isStatic ~= true then
+			local delta = object.pos - pData.pos
+			local dist = delta.Magnitude
+
+			if dist <= (
+				pData.radius
+					+ object.radius
+					+ phys.kickRangeExtra
+				) then
+				pData.lastKickTick = currentTick
+
+				local kickDir =
+					dist > 0
+					and delta.Unit
+					or Vector2.new(1, 0)
+
+				object.vel +=
+					kickDir * phys.kickForce
+			end
+		end
 	end
 end
+
+----------------------------------------------------
+-- BROADPHASE UPDATE
+----------------------------------------------------
 
 local function updateDiscBroadphase(
 	broadphase: Broadphase,
 	disc: CircleObject
 )
-	local entry = broadphase.dynamicDiscEntries[disc]
+	local entry =
+		broadphase.dynamicDiscEntries[disc]
 
 	if entry then
-		broadphase.dynamicDiscEntries[disc] = SpatialHash.update(
-			broadphase.dynamicDiscGrid,
-			entry,
-			getCircleAABB(disc)
-		)
+		broadphase.dynamicDiscEntries[disc] =
+			SpatialHash.update(
+				broadphase.dynamicDiscGrid,
+				entry,
+				getCircleAABB(disc)
+			)
 	end
 end
 
@@ -690,14 +994,16 @@ local function updateSegmentBroadphase(
 	broadphase: Broadphase,
 	segment: Segment
 )
-	local entry = broadphase.dynamicSegmentEntries[segment]
+	local entry =
+		broadphase.dynamicSegmentEntries[segment]
 
 	if entry then
-		broadphase.dynamicSegmentEntries[segment] = SpatialHash.update(
-			broadphase.dynamicSegmentGrid,
-			entry,
-			getSegmentAABB(segment)
-		)
+		broadphase.dynamicSegmentEntries[segment] =
+			SpatialHash.update(
+				broadphase.dynamicSegmentGrid,
+				entry,
+				getSegmentAABB(segment)
+			)
 	end
 end
 
@@ -705,14 +1011,16 @@ local function updateShapeBroadphase(
 	broadphase: Broadphase,
 	shape: PhysicalShape
 )
-	local entry = broadphase.dynamicShapeEntries[shape]
+	local entry =
+		broadphase.dynamicShapeEntries[shape]
 
 	if entry then
-		broadphase.dynamicShapeEntries[shape] = SpatialHash.update(
-			broadphase.dynamicShapeGrid,
-			entry,
-			getShapeAABB(shape)
-		)
+		broadphase.dynamicShapeEntries[shape] =
+			SpatialHash.update(
+				broadphase.dynamicShapeGrid,
+				entry,
+				getShapeAABB(shape)
+			)
 	end
 end
 
@@ -720,21 +1028,38 @@ local function updatePlayerBroadphase(
 	broadphase: Broadphase,
 	player: CircleObject
 )
-	local entry = broadphase.playerEntries[player]
+	local entry =
+		broadphase.playerEntries[player]
 
 	if entry then
-		broadphase.playerEntries[player] = SpatialHash.update(
-			broadphase.playerGrid,
-			entry,
-			getCircleAABB(player)
-		)
+		broadphase.playerEntries[player] =
+			SpatialHash.update(
+				broadphase.playerGrid,
+				entry,
+				getCircleAABB(player)
+			)
 	end
 end
 
 ----------------------------------------------------
--- 6. STEP DA FÍSICA INTEGRADO
+-- STEP DA FÍSICA
 ----------------------------------------------------
-function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, phys, fixedDt, currentTick)
+
+function PhysicsEngine.Step(
+	playersData,
+	sortedUserIds,
+	discs,
+	segments,
+	shapes,
+	collisionDiscs,
+	collisionSegments,
+	collisionShapes,
+	broadphase,
+	phys,
+	kickableObjects,
+	fixedDt,
+	currentTick
+)
 	PhysicsEngine.rebuildPlayerBroadphase(
 		broadphase,
 		playersData,
@@ -749,28 +1074,43 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		local pData = playersData[uId]
 
 		if pData then
-			local decelFactor = phys.playerDecelFactor or 0.88
+			local decelFactor =
+				phys.playerDecelFactor or 0.88
 
 			pData.vel *= decelFactor
 
-			if pData.input and pData.input.Magnitude > 0 then
-				local mass = math.max(pData.mass, 0.000001)
-				local force = pData.input.Unit * (phys.playerAccel * mass)
-				local acceleration = force / mass
+			if pData.input
+				and pData.input.Magnitude > 0
+			then
+				local mass =
+					math.max(
+						pData.mass,
+						0.000001
+					)
 
-				pData.vel += acceleration * fixedDt
+				local force =
+					pData.input.Unit
+					* (phys.playerAccel * mass)
+
+				local acceleration =
+					force / mass
+
+				pData.vel +=
+					acceleration * fixedDt
 			end
 
-			local friction = math.clamp(
-				phys.playerFriction or 1,
-				0,
-				1
-			)
+			local friction =
+				math.clamp(
+					phys.playerFriction or 1,
+					0,
+					1
+				)
 
-			local frictionFactor = math.max(
-				0,
-				1 - friction * fixedDt
-			)
+			local frictionFactor =
+				math.max(
+					0,
+					1 - friction * fixedDt
+				)
 
 			pData.vel *= frictionFactor
 			pData.pos += pData.vel * fixedDt
@@ -778,7 +1118,7 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 			if pData.isKicking then
 				PhysicsEngine.tryKick(
 					pData,
-					ball,
+					kickableObjects,
 					phys,
 					currentTick
 				)
@@ -792,35 +1132,55 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 	end
 
 	----------------------------------------------------
-	-- MOVIMENTO DOS OBJETOS DINÂMICOS
+	-- MOVIMENTO DOS DISCS
 	----------------------------------------------------
 
 	for _, disc in ipairs(discs) do
 		if disc.isStatic == false then
-			disc.vel = (disc.vel or Vector2.zero) * (disc.damping or 0.98)
-			disc.pos += disc.vel * fixedDt
+			disc.vel =
+				(disc.vel or Vector2.zero)
+				* (disc.damping or 0.98)
+
+			disc.pos +=
+				disc.vel * fixedDt
 		end
 	end
 
+	----------------------------------------------------
+	-- MOVIMENTO DOS SEGMENTS
+	----------------------------------------------------
+
 	for _, seg in ipairs(segments) do
 		if seg.isStatic == false then
-			seg.vel = (seg.vel or Vector2.zero) * (seg.damping or 0.98)
+			seg.vel =
+				(seg.vel or Vector2.zero)
+				* (seg.damping or 0.98)
 
-			local delta = seg.vel * fixedDt
+			local delta =
+				seg.vel * fixedDt
+
 			seg.a += delta
 			seg.b += delta
 		end
 	end
 
+	----------------------------------------------------
+	-- MOVIMENTO DOS SHAPES
+	----------------------------------------------------
+
 	for _, shape in ipairs(shapes) do
 		if shape.isStatic == false then
-			shape.vel = (shape.vel or Vector2.zero) * (shape.damping or 0.98)
-			shape.pos += shape.vel * fixedDt
+			shape.vel =
+				(shape.vel or Vector2.zero)
+				* (shape.damping or 0.98)
+
+			shape.pos +=
+				shape.vel * fixedDt
 		end
 	end
 
 	----------------------------------------------------
-	-- UM ÚNICO REBUILD NO INÍCIO DO TICK
+	-- REBUILD BROADPHASE
 	----------------------------------------------------
 
 	PhysicsEngine.rebuildBroadphase(
@@ -831,92 +1191,139 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 	)
 
 	----------------------------------------------------
-	-- BOLA / SUBSTEPS
+	-- DISCS / SUBSTEPS
 	----------------------------------------------------
 
-	local steps = math.clamp(
-		math.ceil(ball.vel.Magnitude / 6),
-		1,
-		4
-	)
-
-	local subDt = fixedDt / steps
-	local dampingFactor = math.pow(
-		phys.ballDamping,
-		1 / steps
-	)
-
-	for _ = 1, steps do
-		ball.vel *= dampingFactor
-		ball.pos += ball.vel * subDt
-
-		for _ = 1, 2 do
-			------------------------------------------------
-			-- BOLA VS DISC
-			------------------------------------------------
-
-			local ballAABB = getCircleAABB(ball)
-
-			local nearbyDiscs = SpatialHash.queryCombined(
-				broadphase.staticDiscGrid,
-				broadphase.dynamicDiscGrid,
-				ballAABB
+	for _, disc in ipairs(discs) do
+		if disc.isStatic ~= true then
+			local steps = math.clamp(
+				math.ceil(
+					disc.vel.Magnitude / 6
+				),
+				1,
+				4
 			)
 
-			for _, entry in ipairs(nearbyDiscs) do
-				PhysicsEngine.resolveCircleCollision(
-					ball,
-					entry.object
-				)
-			end
+			local subDt =
+				fixedDt / steps
 
-			------------------------------------------------
-			-- BOLA VS SEGMENT
-			------------------------------------------------
+			local damping =
+				disc.damping or 0.99
 
-			ballAABB = getCircleAABB(ball)
-
-			local nearbySegments = SpatialHash.queryCombined(
-				broadphase.staticSegmentGrid,
-				broadphase.dynamicSegmentGrid,
-				ballAABB
-			)
-
-			for _, entry in ipairs(nearbySegments) do
-				PhysicsEngine.resolveSegmentCollision(
-					ball,
-					entry.object
-				)
-			end
-
-			------------------------------------------------
-			-- BOLA VS SHAPE
-			------------------------------------------------
-
-			ballAABB = getCircleAABB(ball)
-
-			local nearbyShapes = SpatialHash.queryCombined(
-				broadphase.staticShapeGrid,
-				broadphase.dynamicShapeGrid,
-				ballAABB
-			)
-
-			for _, entry in ipairs(nearbyShapes) do
-				PhysicsEngine.resolveShapeCollision(
-					ball,
-					entry.object
+			local dampingFactor =
+				math.pow(
+					damping,
+					1 / steps
 				)
 
-				updateShapeBroadphase(
-					broadphase,
-					entry.object
-				)
+			for _ = 1, steps do
+				disc.vel *= dampingFactor
+				disc.pos +=
+					disc.vel * subDt
+
+				for _ = 1, 2 do
+					------------------------------------------------
+					-- DISC VS DISC
+					------------------------------------------------
+
+					local discAABB =
+						getCircleAABB(disc)
+
+					local nearbyDiscs =
+						SpatialHash.queryCombined(
+							broadphase.staticDiscGrid,
+							broadphase.dynamicDiscGrid,
+							discAABB
+						)
+
+					for _, entry in ipairs(nearbyDiscs) do
+						local other =
+							entry.object
+
+						if other ~= disc then
+							PhysicsEngine.resolveCircleCollision(
+								disc,
+								other
+							)
+
+							updateDiscBroadphase(
+								broadphase,
+								other
+							)
+
+							updateDiscBroadphase(
+								broadphase,
+								disc
+							)
+						end
+					end
+
+					------------------------------------------------
+					-- DISC VS SEGMENT
+					------------------------------------------------
+
+					discAABB =
+						getCircleAABB(disc)
+
+					local nearbySegments =
+						SpatialHash.queryCombined(
+							broadphase.staticSegmentGrid,
+							broadphase.dynamicSegmentGrid,
+							discAABB
+						)
+
+					for _, entry in ipairs(nearbySegments) do
+						PhysicsEngine.resolveSegmentCollision(
+							disc,
+							entry.object
+						)
+
+						updateDiscBroadphase(
+							broadphase,
+							disc
+						)
+					end
+
+					------------------------------------------------
+					-- DISC VS SHAPE
+					------------------------------------------------
+
+					discAABB =
+						getCircleAABB(disc)
+
+					local nearbyShapes =
+						SpatialHash.queryCombined(
+							broadphase.staticShapeGrid,
+							broadphase.dynamicShapeGrid,
+							discAABB
+						)
+
+					for _, entry in ipairs(nearbyShapes) do
+						local shape =
+							entry.object
+
+						PhysicsEngine.resolveShapeCollision(
+							disc,
+							shape
+						)
+
+						updateDiscBroadphase(
+							broadphase,
+							disc
+						)
+
+						updateShapeBroadphase(
+							broadphase,
+							shape
+						)
+					end
+				end
 			end
 		end
 	end
 
 	----------------------------------------------------
-	-- SHAPES / SEGMENTS / DISCS
+	-- SHAPES / SEGMENTS / PLAYERS
 	----------------------------------------------------
 
 	for _ = 1, 2 do
@@ -925,17 +1332,22 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		------------------------------------------------
 
 		for idxA, shapeA in ipairs(collisionShapes) do
-			local shapeAABB = getShapeAABB(shapeA)
+			local shapeAABB =
+				getShapeAABB(shapeA)
 
-			local nearbyShapes = SpatialHash.queryCombined(
-				broadphase.staticShapeGrid,
-				broadphase.dynamicShapeGrid,
-				shapeAABB
-			)
+			local nearbyShapes =
+				SpatialHash.queryCombined(
+					broadphase.staticShapeGrid,
+					broadphase.dynamicShapeGrid,
+					shapeAABB
+				)
 
 			for _, entry in ipairs(nearbyShapes) do
-				local shapeB = entry.object
-				local idxB = entry.index
+				local shapeB =
+					entry.object
+
+				local idxB =
+					entry.index
 
 				if idxB > idxA then
 					PhysicsEngine.resolveShapeVsShapeCollision(
@@ -961,16 +1373,19 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		------------------------------------------------
 
 		for _, shape in ipairs(collisionShapes) do
-			local shapeAABB = getShapeAABB(shape)
+			local shapeAABB =
+				getShapeAABB(shape)
 
-			local nearbySegments = SpatialHash.queryCombined(
-				broadphase.staticSegmentGrid,
-				broadphase.dynamicSegmentGrid,
-				shapeAABB
-			)
+			local nearbySegments =
+				SpatialHash.queryCombined(
+					broadphase.staticSegmentGrid,
+					broadphase.dynamicSegmentGrid,
+					shapeAABB
+				)
 
 			for _, entry in ipairs(nearbySegments) do
-				local segment = entry.object
+				local segment =
+					entry.object
 
 				PhysicsEngine.resolveShapeVsSegmentCollision(
 					shape,
@@ -994,16 +1409,19 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		------------------------------------------------
 
 		for _, shape in ipairs(collisionShapes) do
-			local shapeAABB = getShapeAABB(shape)
+			local shapeAABB =
+				getShapeAABB(shape)
 
-			local nearbyDiscs = SpatialHash.queryCombined(
-				broadphase.staticDiscGrid,
-				broadphase.dynamicDiscGrid,
-				shapeAABB
-			)
+			local nearbyDiscs =
+				SpatialHash.queryCombined(
+					broadphase.staticDiscGrid,
+					broadphase.dynamicDiscGrid,
+					shapeAABB
+				)
 
 			for _, entry in ipairs(nearbyDiscs) do
-				local disc = entry.object
+				local disc =
+					entry.object
 
 				PhysicsEngine.resolveShapeCollision(
 					disc,
@@ -1027,37 +1445,27 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 		------------------------------------------------
 
 		for idxA, uIdA in ipairs(sortedUserIds) do
-			local pA = playersData[uIdA]
+			local pA =
+				playersData[uIdA]
 
 			if pA then
-				----------------------------------------
-				-- PLAYER VS BOLA
-				----------------------------------------
-
-				PhysicsEngine.resolveCircleCollision(
-					pA,
-					ball
-				)
-
-				updatePlayerBroadphase(
-					broadphase,
-					pA
-				)
-
 				----------------------------------------
 				-- PLAYER VS DISC
 				----------------------------------------
 
-				local playerAABB = getCircleAABB(pA)
+				local playerAABB =
+					getCircleAABB(pA)
 
-				local nearbyDiscs = SpatialHash.queryCombined(
-					broadphase.staticDiscGrid,
-					broadphase.dynamicDiscGrid,
-					playerAABB
-				)
+				local nearbyDiscs =
+					SpatialHash.queryCombined(
+						broadphase.staticDiscGrid,
+						broadphase.dynamicDiscGrid,
+						playerAABB
+					)
 
 				for _, entry in ipairs(nearbyDiscs) do
-					local disc = entry.object
+					local disc =
+						entry.object
 
 					PhysicsEngine.resolveCircleCollision(
 						pA,
@@ -1074,23 +1482,29 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						disc
 					)
 
-					playerAABB = getCircleAABB(pA)
+					playerAABB =
+						getCircleAABB(pA)
 				end
 
 				----------------------------------------
 				-- PLAYER VS PLAYER
 				----------------------------------------
 
-				playerAABB = getCircleAABB(pA)
+				playerAABB =
+					getCircleAABB(pA)
 
-				local nearbyPlayers = SpatialHash.query(
-					broadphase.playerGrid,
-					playerAABB
-				)
+				local nearbyPlayers =
+					SpatialHash.query(
+						broadphase.playerGrid,
+						playerAABB
+					)
 
 				for _, entry in ipairs(nearbyPlayers) do
-					local pB = entry.object
-					local idxB = entry.index
+					local pB =
+						entry.object
+
+					local idxB =
+						entry.index
 
 					if idxB > idxA then
 						PhysicsEngine.resolveCircleCollision(
@@ -1108,7 +1522,8 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 							pB
 						)
 
-						playerAABB = getCircleAABB(pA)
+						playerAABB =
+							getCircleAABB(pA)
 					end
 				end
 
@@ -1116,13 +1531,15 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 				-- PLAYER VS SEGMENT
 				----------------------------------------
 
-				playerAABB = getCircleAABB(pA)
+				playerAABB =
+					getCircleAABB(pA)
 
-				local nearbySegments = SpatialHash.queryCombined(
-					broadphase.staticSegmentGrid,
-					broadphase.dynamicSegmentGrid,
-					playerAABB
-				)
+				local nearbySegments =
+					SpatialHash.queryCombined(
+						broadphase.staticSegmentGrid,
+						broadphase.dynamicSegmentGrid,
+						playerAABB
+					)
 
 				for _, entry in ipairs(nearbySegments) do
 					PhysicsEngine.resolveSegmentCollision(
@@ -1135,23 +1552,27 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						pA
 					)
 
-					playerAABB = getCircleAABB(pA)
+					playerAABB =
+						getCircleAABB(pA)
 				end
 
 				----------------------------------------
 				-- PLAYER VS SHAPE
 				----------------------------------------
 
-				playerAABB = getCircleAABB(pA)
+				playerAABB =
+					getCircleAABB(pA)
 
-				local nearbyShapes = SpatialHash.queryCombined(
-					broadphase.staticShapeGrid,
-					broadphase.dynamicShapeGrid,
-					playerAABB
-				)
+				local nearbyShapes =
+					SpatialHash.queryCombined(
+						broadphase.staticShapeGrid,
+						broadphase.dynamicShapeGrid,
+						playerAABB
+					)
 
 				for _, entry in ipairs(nearbyShapes) do
-					local shape = entry.object
+					local shape =
+						entry.object
 
 					PhysicsEngine.resolveShapeCollision(
 						pA,
@@ -1168,7 +1589,8 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						shape
 					)
 
-					playerAABB = getCircleAABB(pA)
+					playerAABB =
+						getCircleAABB(pA)
 				end
 			end
 		end
@@ -1179,13 +1601,15 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 
 		for _, disc in ipairs(discs) do
 			if disc.isStatic == false then
-				local discAABB = getCircleAABB(disc)
+				local discAABB =
+					getCircleAABB(disc)
 
-				local nearbySegments = SpatialHash.queryCombined(
-					broadphase.staticSegmentGrid,
-					broadphase.dynamicSegmentGrid,
-					discAABB
-				)
+				local nearbySegments =
+					SpatialHash.queryCombined(
+						broadphase.staticSegmentGrid,
+						broadphase.dynamicSegmentGrid,
+						discAABB
+					)
 
 				for _, entry in ipairs(nearbySegments) do
 					PhysicsEngine.resolveSegmentCollision(
@@ -1198,7 +1622,8 @@ function PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, s
 						disc
 					)
 
-					discAABB = getCircleAABB(disc)
+					discAABB =
+						getCircleAABB(disc)
 				end
 			end
 		end
