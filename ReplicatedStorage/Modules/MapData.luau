@@ -6,63 +6,110 @@ MapData.Default = {
 		author = "Sistema"
 	},
 
-	groups = {
-		"ball",      -- Bit 1
-		"player",    -- Bit 2
-		"wall",      -- Bit 3
-		"goal",      -- Bit 4
-		"obstacle",  -- Bit 5
-	},
-
 	bounds = {
 		width = 800,
 		height = 400,
 		padding = 0,
 	},
 
-	physics = {
-		playerRadius = 18,
-		playerMass = 5,
-		playerAccel = 1200,
-		playerFriction = 1,
-		playerDecelFactor = 0.88,
-		
-		kickForce = 300,
-		kickRangeExtra = 4,
-		kickCooldown = 0.3,
+	----------------------------------------------------
+	-- GRUPOS DE COLISÃO
+	----------------------------------------------------
 
-		ballRadius = 13,
-		ballMass = 1,
-		ballDamping = 0.99,
+	groups = {
+		"ball",
+		"player",
+		"wall",
+		"goal",
+		"obstacle",
+	},
 
-		ballGroup = {"ball"},
-		ballMask = "all",
+	----------------------------------------------------
+	-- REGRAS DE GAMEPLAY
+	----------------------------------------------------
 
-		playerGroup = {"player"},
-		playerMask = {
+	gameplay = {
+
+		------------------------------------------------
+		-- JOGADOR
+		------------------------------------------------
+
+		player = {
+			radius = 18,
+			mass = 5,
+			accel = 1200,
+			friction = 1,
+			decelFactor = 0.88,
+
+			spawn = {
+				Red = Vector2.new(200, 200),
+				Blue = Vector2.new(600, 200),
+			},
+
+			collision = {
+				group = {"player"},
+				mask = {
+					"ball",
+					"player",
+					"goal",
+					"obstacle",
+				},
+			},
+		},
+
+		------------------------------------------------
+		-- CHUTE
+		------------------------------------------------
+
+		kick = {
+			force = 300,
+			rangeExtra = 4,
+			cooldown = 0.3,
+		},
+
+		------------------------------------------------
+		-- OBJETOS CHUTÁVEIS
+		------------------------------------------------
+		--
+		-- Os IDs precisam existir em discs/shapes/segments.
+		--
+
+		kickable = {
 			"ball",
-			"player",
-			"goal",
-			"obstacle"
+		},
+
+		------------------------------------------------
+		-- OBJETOS QUE PODEM MARCAR PONTO
+		------------------------------------------------
+		--
+		-- `object` identifica o objeto físico.
+		-- `team` identifica quem recebe o ponto.
+		--
+
+		scoring = {
+			{
+				id = "left_goal",
+				object = "ball",
+				team = "Blue",
+				min = Vector2.new(-40, 125),
+				max = Vector2.new(0, 275),
+			},
+
+			{
+				id = "right_goal",
+				object = "ball",
+				team = "Red",
+				min = Vector2.new(800, 125),
+				max = Vector2.new(840, 275),
+			},
 		},
 	},
 
-	spawns = {
-		ball = Vector2.new(400, 200),
-		red = Vector2.new(200, 200),
-		blue = Vector2.new(600, 200),
-	},
-
-	goals = {
-		{ teamScored = "Blue", min = Vector2.new(-40, 125), max = Vector2.new(0, 275) },
-		{ teamScored = "Red",  min = Vector2.new(800, 125), max = Vector2.new(840, 275) },
-	},
-
 	----------------------------------------------------
-	-- FORMAS VISUAIS E FÍSICAS (SHAPES)
+	-- SHAPES
 	----------------------------------------------------
+
 	shapes = {
-		-- 1. Grande Área Esquerda
 		{
 			pos = Vector2.new(60, 200),
 			size = Vector2.new(120, 220),
@@ -74,7 +121,6 @@ MapData.Default = {
 			isSolid = false,
 		},
 
-		-- 2. Grande Área Direita
 		{
 			pos = Vector2.new(740, 200),
 			size = Vector2.new(120, 220),
@@ -86,7 +132,6 @@ MapData.Default = {
 			isSolid = false,
 		},
 
-		-- 3. Círculo do Meio Campo
 		{
 			pos = Vector2.new(400, 200),
 			size = Vector2.new(140, 140),
@@ -107,7 +152,6 @@ MapData.Default = {
 			isSolid = false,
 		},
 
-		-- Obstáculo Cápsula Estático
 		{
 			pos = Vector2.new(400, 300),
 			size = Vector2.new(160, 50),
@@ -121,7 +165,6 @@ MapData.Default = {
 			cMask = "all",
 		},
 
-		-- Cápsula móvel
 		{
 			id = "obstaculo_central",
 			pos = Vector2.new(500, 200),
@@ -137,12 +180,13 @@ MapData.Default = {
 			restitution = 0.1,
 			cGroup = {"obstacle"},
 			cMask = {"goal", "player"},
-		}
+		},
 	},
 
 	----------------------------------------------------
-	-- PAREDES / LINHAS (SUPORTAM `curve` E `curveSegments`)
+	-- SEGMENTOS
 	----------------------------------------------------
+
 	segments = {
 		{ a = Vector2.new(360, 0), b = Vector2.new(360, 400), thickness = 40, color = Color3.fromRGB(60, 121, 49), isSolid = false },
 		{ a = Vector2.new(280, 0), b = Vector2.new(280, 400), thickness = 40, color = Color3.fromRGB(60, 121, 49), isSolid = false },
@@ -155,7 +199,6 @@ MapData.Default = {
 		{ a = Vector2.new(680, 0), b = Vector2.new(680, 400), thickness = 40, color = Color3.fromRGB(60, 121, 49), isSolid = false },
 		{ a = Vector2.new(760, 0), b = Vector2.new(760, 400), thickness = 40, color = Color3.fromRGB(60, 121, 49), isSolid = false },
 
-		-- Borda Externa do Campo
 		{ a = Vector2.new(0, 0), b = Vector2.new(800, 0), thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0.1, cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(0, 400), b = Vector2.new(800, 400), thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0.1, cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(0, 0), b = Vector2.new(0, 125), thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0.1, cGroup = {"wall"}, cMask = "all" },
@@ -163,27 +206,87 @@ MapData.Default = {
 		{ a = Vector2.new(800, 0), b = Vector2.new(800, 125), thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0.1, cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(800, 275), b = Vector2.new(800, 400), thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0.1, cGroup = {"wall"}, cMask = "all" },
 
-		-- Linha do Meio Campo
 		{ a = Vector2.new(400, 0), b = Vector2.new(400, 400), thickness = 2, color = Color3.fromRGB(255, 255, 255), isSolid = false },
 
-		-- Redes Esquerda (Exemplo de Rede Curvada com `curve = -7`)
 		{ a = Vector2.new(0, 125), b = Vector2.new(-40, 125), thickness = 2, color = Color3.fromRGB(255, 255, 255), cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(0, 275), b = Vector2.new(-40, 275), thickness = 2, color = Color3.fromRGB(255, 255, 255), cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(-40, 125), b = Vector2.new(-40, 275), curve = -7, curveSegments = 10, thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0, cGroup = {"wall"}, cMask = "all" },
 
-		-- Redes Direita (Exemplo de Rede Curvada com `curve = 7`)
 		{ a = Vector2.new(800, 125), b = Vector2.new(840, 125), thickness = 2, color = Color3.fromRGB(255, 255, 255), cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(800, 275), b = Vector2.new(840, 275), thickness = 2, color = Color3.fromRGB(255, 255, 255), cGroup = {"wall"}, cMask = "all" },
 		{ a = Vector2.new(840, 125), b = Vector2.new(840, 275), curve = 7, curveSegments = 10, thickness = 2, color = Color3.fromRGB(255, 255, 255), restitution = 0, cGroup = {"wall"}, cMask = "all" },
 	},
 
-	-- Traves
+	----------------------------------------------------
+	-- OBJETOS CIRCULARES
+	----------------------------------------------------
+
 	discs = {
-		{ pos = Vector2.new(0, 125), radius = 5, color = Color3.fromRGB(255, 255, 255), strokeWidth = 1, strokeColor = Color3.fromRGB(0, 0, 0), cGroup = {"goal"}, cMask = "all" },
-		{ pos = Vector2.new(0, 275), radius = 5, color = Color3.fromRGB(255, 255, 255), strokeWidth = 1, strokeColor = Color3.fromRGB(0, 0, 0), cGroup = {"goal"}, cMask = "all" },
-		{ pos = Vector2.new(800, 125), radius = 5, color = Color3.fromRGB(255, 255, 255), strokeWidth = 1, strokeColor = Color3.fromRGB(0, 0, 0), cGroup = {"goal"}, cMask = "all" },
-		{ pos = Vector2.new(800, 275), radius = 5, color = Color3.fromRGB(255, 255, 255), strokeWidth = 1, strokeColor = Color3.fromRGB(0, 0, 0), cGroup = {"goal"}, cMask = "all" },
-	}
+
+		------------------------------------------------
+		-- OBJETO PRINCIPAL DO JOGO
+		------------------------------------------------
+
+		{
+			id = "ball",
+			pos = Vector2.new(400, 200),
+			radius = 13,
+			mass = 1,
+			damping = 0.99,
+			restitution = 0.5,
+			isStatic = false,
+			isSolid = true,
+			cGroup = {"ball"},
+			cMask = "all",
+			color = Color3.fromRGB(255, 255, 255),
+			strokeWidth = 3,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+		},
+
+		------------------------------------------------
+		-- TRAVES
+		------------------------------------------------
+
+		{
+			pos = Vector2.new(0, 125),
+			radius = 5,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		{
+			pos = Vector2.new(0, 275),
+			radius = 5,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		{
+			pos = Vector2.new(800, 125),
+			radius = 5,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		{
+			pos = Vector2.new(800, 275),
+			radius = 5,
+			color = Color3.fromRGB(255, 255, 255),
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+	},
 }
 
 return MapData
