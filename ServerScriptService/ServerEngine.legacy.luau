@@ -211,7 +211,7 @@ for _, object in ipairs(segments) do
 	end
 end
 
-local kickableObjects: { PhysicsEngine.CircleObject } = {}
+local kickableObjects: { any } = {}
 
 local kickableIds =
 	currentMap.gameplay
@@ -221,10 +221,7 @@ if kickableIds then
 	for _, id in ipairs(kickableIds) do
 		local object = objectsById[id]
 
-		if object
-			and object.pos
-			and object.radius
-		then
+		if object then
 			kickableObjects[#kickableObjects + 1] = object
 		end
 	end
