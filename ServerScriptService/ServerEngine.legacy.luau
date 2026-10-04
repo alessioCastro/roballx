@@ -125,28 +125,30 @@ local function processSegments(
 
 		if curve == 0 then
 			processed[#processed + 1] = {
-				id = seg.id or ("seg_" .. idx),
+			id = seg.id or ("seg_" .. idx),
 
-				a = seg.a,
-				b = seg.b,
+			a = seg.a,
+			b = seg.b,
 
-				vel = Vector2.zero,
+			vel = Vector2.zero,
 
-				mass = seg.mass or 1,
-				restitution = seg.restitution or 0.5,
+			mass = seg.mass or 1,
+			restitution = seg.restitution or 0.5,
 
-				isStatic = (seg.isStatic ~= false),
-				isSolid = (seg.isSolid ~= false),
+			isStatic = (seg.isStatic ~= false),
+			isSolid = (seg.isSolid ~= false),
 
-				damping = seg.damping or 0.98,
-				thickness = seg.thickness,
+			damping = seg.damping or 0.98,
+			resettable = (seg.resettable ~= false),
 
-				ignoreCapA = seg.ignoreCapA,
-				ignoreCapB = seg.ignoreCapB,
+			thickness = seg.thickness,
 
-				cGroup = buildBitmask(seg.cGroup),
-				cMask = buildBitmask(seg.cMask)
-			}
+			ignoreCapA = seg.ignoreCapA,
+			ignoreCapB = seg.ignoreCapB,
+
+			cGroup = buildBitmask(seg.cGroup),
+			cMask = buildBitmask(seg.cMask)
+		}
 		else
 			local samples = seg.curveSegments or 10
 			local ab = seg.b - seg.a
@@ -188,6 +190,8 @@ local function processSegments(
 					isSolid = (seg.isSolid ~= false),
 
 					damping = seg.damping or 0.98,
+					resettable = (seg.resettable ~= false),
+
 					thickness = seg.thickness,
 
 					ignoreCapA = seg.ignoreCapA,
@@ -241,6 +245,7 @@ if currentMap.discs then
 				isSolid = (disc.isSolid ~= false),
 
 				damping = disc.damping or 0.98,
+				resettable = (disc.resettable ~= false),
 
 				cGroup = buildBitmask(disc.cGroup),
 				cMask = buildBitmask(disc.cMask)
@@ -302,6 +307,7 @@ if currentMap.shapes then
 				isSolid = (shape.isSolid ~= false),
 
 				damping = shape.damping or 0.98,
+				resettable = (shape.resettable ~= false),
 
 				cGroup = buildBitmask(shape.cGroup),
 				cMask = buildBitmask(shape.cMask),
@@ -379,7 +385,7 @@ end
 if not playerTemplate then
 	error(
 		"MapData.gameplay.player.object referencia um objeto inexistente: "
-		.. playerObjectId
+			.. playerObjectId
 	)
 end
 
@@ -498,7 +504,8 @@ end
 
 local function createPlayerFromTemplate(
 	spawnPosition: Vector2,
-	team: string
+	team: string,
+	spawnIndex: number
 ): PhysicsEngine.PlayerObject
 
 	local template = playerTemplate
@@ -515,6 +522,7 @@ local function createPlayerFromTemplate(
 		isSolid = true,
 
 		team = team,
+		spawnIndex = spawnIndex,
 
 		input = Vector2.zero,
 		isKicking = false,
@@ -534,7 +542,7 @@ local function createPlayerFromTemplate(
 	------------------------------------------------
 
 	if template.radius then
-		local player: PhysicsEngine.PlayerObject = {
+		return {
 			kind = "disc",
 
 			id = common.id,
@@ -551,6 +559,7 @@ local function createPlayerFromTemplate(
 			isSolid = common.isSolid,
 
 			team = common.team,
+			spawnIndex = common.spawnIndex,
 
 			input = common.input,
 			isKicking = common.isKicking,
@@ -559,8 +568,6 @@ local function createPlayerFromTemplate(
 			cGroup = common.cGroup,
 			cMask = common.cMask
 		}
-
-		return player
 	end
 
 	------------------------------------------------
@@ -607,6 +614,7 @@ local function createPlayerFromTemplate(
 			isSolid = common.isSolid,
 
 			team = common.team,
+			spawnIndex = common.spawnIndex,
 
 			input = common.input,
 			isKicking = common.isKicking,
@@ -670,7 +678,7 @@ local function createPlayerFromTemplate(
 		local offset =
 			spawnPosition - originalCenter
 
-		local player: PhysicsEngine.PlayerObject = {
+		return {
 			kind = "segment",
 
 			id = common.id,
@@ -692,6 +700,7 @@ local function createPlayerFromTemplate(
 			isSolid = common.isSolid,
 
 			team = common.team,
+			spawnIndex = common.spawnIndex,
 
 			input = common.input,
 			isKicking = common.isKicking,
@@ -700,13 +709,47 @@ local function createPlayerFromTemplate(
 			cGroup = common.cGroup,
 			cMask = common.cMask
 		}
-
-		return player
 	end
 
 	error(
 		"Objeto de player inválido: "
-		.. playerObjectId
+			.. playerObjectId
+	)
+end
+
+local function getNextSpawnIndex(
+	team: string
+): number
+	local spawnPositions
+
+	if team == "Red" then
+		spawnPositions =
+			playerGameplay.spawn.team1Positions
+	else
+		spawnPositions =
+			playerGameplay.spawn.team2Positions
+	end
+
+	for index = 1, #spawnPositions do
+		local occupied = false
+
+		for _, pData in pairs(playersData) do
+			if pData.team == team
+				and pData.spawnIndex == index
+			then
+				occupied = true
+				break
+			end
+		end
+
+		if not occupied then
+			return index
+		end
+	end
+
+	error(
+		"Não existem posições de spawn suficientes para o time "
+		.. team
 	)
 end
 
@@ -718,20 +761,27 @@ Players.PlayerAdded:Connect(function(plr)
 	local isRed =
 		(#Players:GetPlayers() % 2 ~= 0)
 
-	local spawnPosition =
-		isRed
-		and playerGameplay.spawn.Red
-		or playerGameplay.spawn.Blue
-
 	local team =
 		isRed
 		and "Red"
 		or "Blue"
 
+	local spawnIndex =
+		getNextSpawnIndex(team)
+
+	local spawnPositions =
+		isRed
+		and playerGameplay.spawn.team1Positions
+		or playerGameplay.spawn.team2Positions
+
+	local spawnPosition =
+		spawnPositions[spawnIndex]
+
 	playersData[plr.UserId] =
 		createPlayerFromTemplate(
 			spawnPosition,
-			team
+			team,
+			spawnIndex
 		)
 
 	rebuildSortedUserIds()
