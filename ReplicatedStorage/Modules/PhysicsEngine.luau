@@ -215,7 +215,7 @@ local function getPlayerBoundingRadius(player: PlayerObject): number
 
 		return math.sqrt(
 			(size.X * 0.5) ^ 2
-			+ (size.Y * 0.5) ^ 2
+				+ (size.Y * 0.5) ^ 2
 		)
 	end
 
@@ -435,6 +435,15 @@ function PhysicsEngine.rebuildPlayerBroadphase(
 			broadphase.playerIndex[player] = nil
 		end
 	end
+end
+
+local function getCombinedRestitution(
+	a: any,
+	b: any
+): number
+	return
+		math.max(0, a.restitution or 0)
+		* math.max(0, b.restitution or 0)
 end
 
 ----------------------------------------------------
@@ -688,80 +697,88 @@ function PhysicsEngine.resolveShapeCollision(
 	local minDist =
 		obj.radius + shapeRad
 
-	if dist < minDist then
-		local normal =
-			dist > 0.0001
-			and delta / dist
-			or Vector2.new(0, 1)
+	if dist >= minDist then
+		return
+	end
 
-		local overlap =
-			minDist - dist
+	local normal =
+		dist > 0.0001
+		and delta / dist
+		or Vector2.new(0, 1)
 
-		if shapeIsStatic then
-			obj.pos +=
-				normal * overlap
-		elseif objIsStatic then
-			shape.pos -=
-				normal * overlap
-		else
-			local totalMass =
-				obj.mass + shapeMass
+	local overlap =
+		minDist - dist
 
-			obj.pos +=
-				normal
-				* overlap
-				* (shapeMass / totalMass)
+	if shapeIsStatic then
+		obj.pos +=
+			normal * overlap
 
-			shape.pos -=
-				normal
-				* overlap
-				* (obj.mass / totalMass)
-		end
+	elseif objIsStatic then
+		shape.pos -=
+			normal * overlap
 
-		local relVel =
-			obj.vel - shapeVel
+	else
+		local totalMass =
+			obj.mass + shapeMass
 
-		local velAlongNormal =
-			relVel:Dot(normal)
+		obj.pos +=
+			normal
+			* overlap
+			* (shapeMass / totalMass)
 
-		if velAlongNormal < 0 then
-			local e =
-				math.min(
-					obj.restitution,
-					shape.restitution or 0.2
-				)
+		shape.pos -=
+			normal
+			* overlap
+			* (obj.mass / totalMass)
+	end
 
-			if shapeIsStatic then
-				obj.vel -=
-					(1 + e)
-					* velAlongNormal
-					* normal
-			elseif objIsStatic then
-				shape.vel =
-					shapeVel
-					+ (1 + e)
-					* velAlongNormal
-					* normal
-			else
-				local impulseMag =
-					-(1 + e)
-					* velAlongNormal
-					/ (
-						1 / obj.mass
-						+ 1 / shapeMass
-					)
+	local relVel =
+		obj.vel - shapeVel
 
-				local impulse =
-					normal * impulseMag
+	local velAlongNormal =
+		relVel:Dot(normal)
 
-				obj.vel +=
-					impulse / obj.mass
+	if velAlongNormal >= 0 then
+		return
+	end
 
-				shape.vel =
-					shapeVel
-					- impulse / shapeMass
-			end
-		end
+	local e =
+		getCombinedRestitution(
+			obj,
+			shape
+		)
+
+	if shapeIsStatic then
+		obj.vel -=
+			(1 + e)
+			* velAlongNormal
+			* normal
+
+	elseif objIsStatic then
+		shape.vel =
+			shapeVel
+			+ (1 + e)
+			* velAlongNormal
+			* normal
+
+	else
+		local impulseMag =
+			-(1 + e)
+			* velAlongNormal
+			/ (
+				1 / obj.mass
+				+ 1 / shapeMass
+			)
+
+		local impulse =
+			normal * impulseMag
+
+		obj.vel +=
+			impulse / obj.mass
+
+		shape.vel =
+			shapeVel
+			- impulse / shapeMass
 	end
 end
 
@@ -811,113 +828,111 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 	local minDist =
 		radA + radB
 
-	if dist < minDist then
-		local delta =
-			pB - pA
+	if dist >= minDist then
+		return
+	end
 
-		local normal =
-			dist > 0.0001
-			and delta / dist
-			or Vector2.new(0, 1)
+	local delta =
+		pB - pA
 
-		local overlap =
-			minDist - dist
+	local normal =
+		dist > 0.0001
+		and delta / dist
+		or Vector2.new(0, 1)
 
-		local massA =
-			sA.mass or 1
+	local overlap =
+		minDist - dist
 
-		local massB =
-			sB.mass or 1
+	local massA =
+		sA.mass or 1
 
-		local velA =
-			sA.vel or Vector2.zero
+	local massB =
+		sB.mass or 1
 
-		local velB =
-			sB.vel or Vector2.zero
+	local velA =
+		sA.vel or Vector2.zero
 
-		if aIsStatic then
-			sB.pos +=
-				normal * overlap
+	local velB =
+		sB.vel or Vector2.zero
 
-			local velAlongNormal =
-				velB:Dot(normal)
+	local e =
+		getCombinedRestitution(
+			sA,
+			sB
+		)
 
-			if velAlongNormal < 0 then
-				sB.vel =
-					velB
-					- (
-						1
-						+ (sB.restitution or 0.2)
-					)
-					* velAlongNormal
-					* normal
-			end
-
-			return
-		elseif bIsStatic then
-			sA.pos -=
-				normal * overlap
-
-			local velAlongNormal =
-				velA:Dot(normal)
-
-			if velAlongNormal > 0 then
-				sA.vel =
-					velA
-					- (
-						1
-						+ (sA.restitution or 0.2)
-					)
-					* velAlongNormal
-					* normal
-			end
-
-			return
-		end
-
-		local totalMass =
-			massA + massB
-
-		sA.pos -=
-			normal
-			* overlap
-			* (massB / totalMass)
-
+	if aIsStatic then
 		sB.pos +=
-			normal
-			* overlap
-			* (massA / totalMass)
-
-		local relVel =
-			velB - velA
+			normal * overlap
 
 		local velAlongNormal =
-			relVel:Dot(normal)
+			velB:Dot(normal)
 
 		if velAlongNormal < 0 then
-			local e =
-				math.min(
-					sA.restitution or 0.2,
-					sB.restitution or 0.2
-				)
-
-			local impulseMag =
-				-(1 + e)
-				* velAlongNormal
-				/ (
-					1 / massA
-					+ 1 / massB
-				)
-
-			local impulse =
-				normal * impulseMag
-
-			sA.vel =
-				velA - impulse / massA
-
 			sB.vel =
-				velB + impulse / massB
+				velB
+				- (1 + e)
+				* velAlongNormal
+				* normal
 		end
+
+		return
+	end
+
+	if bIsStatic then
+		sA.pos -=
+			normal * overlap
+
+		local velAlongNormal =
+			velA:Dot(normal)
+
+		if velAlongNormal > 0 then
+			sA.vel =
+				velA
+				- (1 + e)
+				* velAlongNormal
+				* normal
+		end
+
+		return
+	end
+
+	local totalMass =
+		massA + massB
+
+	sA.pos -=
+		normal
+		* overlap
+		* (massB / totalMass)
+
+	sB.pos +=
+		normal
+		* overlap
+		* (massA / totalMass)
+
+	local relVel =
+		velB - velA
+
+	local velAlongNormal =
+		relVel:Dot(normal)
+
+	if velAlongNormal < 0 then
+		local impulseMag =
+			-(1 + e)
+			* velAlongNormal
+			/ (
+				1 / massA
+				+ 1 / massB
+			)
+
+		local impulse =
+			normal * impulseMag
+
+		sA.vel =
+			velA - impulse / massA
+
+		sB.vel =
+			velB + impulse / massB
 	end
 end
 
@@ -957,65 +972,134 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 	local minDist =
 		shapeRad + segRad
 
-	if dist < minDist then
-		local delta =
-			pShape - pSeg
+	if dist >= minDist then
+		return
+	end
 
-		local normal =
-			dist > 0.0001
-			and delta / dist
-			or Vector2.new(0, 1)
+	local delta =
+		pShape - pSeg
 
-		local overlap =
-			minDist - dist
+	local normal =
+		dist > 0.0001
+		and delta / dist
+		or Vector2.new(0, 1)
 
-		local shapeIsStatic =
-			shape.isStatic ~= false
+	local overlap =
+		minDist - dist
 
-		local segIsStatic =
-			seg.isStatic ~= false
+	local shapeIsStatic =
+		shape.isStatic ~= false
 
-		local shapeVel =
-			shape.vel or Vector2.zero
+	local segIsStatic =
+		seg.isStatic ~= false
 
-		local segVel =
-			seg.vel or Vector2.zero
+	local shapeVel =
+		shape.vel or Vector2.zero
 
-		if
-			segIsStatic
-			and not shapeIsStatic
-		then
-			shape.pos +=
-				normal * overlap
+	local segVel =
+		seg.vel or Vector2.zero
 
-			local relVel =
-				shapeVel - segVel
+	local shapeMass =
+		shape.mass or 1
 
-			local velAlongNormal =
-				relVel:Dot(normal)
+	local segMass =
+		seg.mass or 1
 
-			if velAlongNormal < 0 then
-				local e =
-					math.min(
-						shape.restitution or 0.2,
-						seg.restitution or 0.2
-					)
+	local e =
+		getCombinedRestitution(
+			shape,
+			seg
+		)
 
-				shape.vel =
-					shapeVel
-					- (1 + e)
-					* velAlongNormal
-					* normal
-			end
-		elseif
-			shapeIsStatic
-			and not segIsStatic
-		then
-			seg.a -=
-				normal * overlap
+	if segIsStatic and not shapeIsStatic then
+		shape.pos +=
+			normal * overlap
 
-			seg.b -=
-				normal * overlap
+		local relVel =
+			shapeVel - segVel
+
+		local velAlongNormal =
+			relVel:Dot(normal)
+
+		if velAlongNormal < 0 then
+			shape.vel =
+				shapeVel
+				- (1 + e)
+				* velAlongNormal
+				* normal
+		end
+
+		return
+	end
+
+	if shapeIsStatic and not segIsStatic then
+		seg.a -=
+			normal * overlap
+
+		seg.b -=
+			normal * overlap
+
+		local relVel =
+			shapeVel - segVel
+
+		local velAlongNormal =
+			relVel:Dot(normal)
+
+		if velAlongNormal > 0 then
+			seg.vel =
+				segVel
+				+ (1 + e)
+				* velAlongNormal
+				* normal
+		end
+
+		return
+	end
+
+	if not shapeIsStatic and not segIsStatic then
+		local totalMass =
+			shapeMass + segMass
+
+		shape.pos +=
+			normal
+			* overlap
+			* (segMass / totalMass)
+
+		seg.a -=
+			normal
+			* overlap
+			* (shapeMass / totalMass)
+
+		seg.b -=
+			normal
+			* overlap
+			* (shapeMass / totalMass)
+
+		local relVel =
+			shapeVel - segVel
+
+		local velAlongNormal =
+			relVel:Dot(normal)
+
+		if velAlongNormal < 0 then
+			local impulseMag =
+				-(1 + e)
+				* velAlongNormal
+				/ (
+					1 / shapeMass
+					+ 1 / segMass
+				)
+
+			local impulse =
+				normal * impulseMag
+
+			shape.vel =
+				shapeVel
+				+ impulse / shapeMass
+
+			seg.vel =
+				segVel
+				- impulse / segMass
 		end
 	end
 end
@@ -1081,39 +1165,131 @@ function PhysicsEngine.resolveSegmentCollision(
 	local dist =
 		delta.Magnitude
 
-	if
-		dist < obj.radius
-		and dist > 0
-	then
-		local normal =
+	if dist >= obj.radius then
+		return
+	end
+
+	local normal
+
+	if dist > 0.0001 then
+		normal =
 			delta / dist
+	else
+		normal =
+			Vector2.new(
+				-ab.Y,
+				ab.X
+			).Unit
+	end
 
-		local overlap =
-			obj.radius - dist
+	local overlap =
+		obj.radius - dist
 
-		local segVel =
-			seg.vel or Vector2.zero
+	local segVel =
+		seg.vel or Vector2.zero
 
-		local segIsStatic =
-			seg.isStatic ~= false
+	local segIsStatic =
+		seg.isStatic ~= false
 
-		if segIsStatic then
-			obj.pos +=
-				normal * overlap
+	local objIsStatic =
+		obj.isStatic == true
 
-			local velAlongNormal =
-				(obj.vel - segVel):Dot(normal)
+	local segMass =
+		seg.mass or 1
 
-			if velAlongNormal < 0 then
-				local bounce =
-					obj.restitution
-					+ (seg.restitution or 0.1)
+	local e =
+		getCombinedRestitution(
+			obj,
+			seg
+		)
 
-				obj.vel -=
-					(1 + bounce)
-					* velAlongNormal
-					* normal
-			end
+	if segIsStatic and not objIsStatic then
+		obj.pos +=
+			normal * overlap
+
+		local relVel =
+			obj.vel - segVel
+
+		local velAlongNormal =
+			relVel:Dot(normal)
+
+		if velAlongNormal < 0 then
+			obj.vel -=
+				(1 + e)
+				* velAlongNormal
+				* normal
+		end
+
+		return
+	end
+
+	if objIsStatic and not segIsStatic then
+		seg.a -=
+			normal * overlap
+
+		seg.b -=
+			normal * overlap
+
+		local relVel =
+			obj.vel - segVel
+
+		local velAlongNormal =
+			relVel:Dot(normal)
+
+		if velAlongNormal > 0 then
+			seg.vel =
+				segVel
+				+ (1 + e)
+				* velAlongNormal
+				* normal
+		end
+
+		return
+	end
+
+	if not objIsStatic and not segIsStatic then
+		local totalMass =
+			obj.mass + segMass
+
+		obj.pos +=
+			normal
+			* overlap
+			* (segMass / totalMass)
+
+		seg.a -=
+			normal
+			* overlap
+			* (obj.mass / totalMass)
+
+		seg.b -=
+			normal
+			* overlap
+			* (obj.mass / totalMass)
+
+		local relativeVel =
+			obj.vel - segVel
+
+		local velAlongNormal =
+			relativeVel:Dot(normal)
+
+		if velAlongNormal < 0 then
+			local impulseMagnitude =
+				-(1 + e)
+				* velAlongNormal
+				/ (
+					1 / obj.mass
+					+ 1 / segMass
+				)
+
+			local impulse =
+				normal * impulseMagnitude
+
+			obj.vel +=
+				impulse / obj.mass
+
+			seg.vel =
+				segVel
+				- impulse / segMass
 		end
 	end
 end
@@ -1146,121 +1322,109 @@ function PhysicsEngine.resolveCircleCollision(
 	local minDist =
 		a.radius + b.radius
 
-	if
-		dist < minDist
-		and dist > 0
-	then
-		local normal =
+	if dist >= minDist then
+		return
+	end
+
+	local normal
+
+	if dist > 0.0001 then
+		normal =
 			delta / dist
+	else
+		normal =
+			Vector2.new(1, 0)
+	end
 
-		local overlap =
-			minDist - dist
+	local overlap =
+		minDist - dist
 
-		local aIsStatic =
-			a.isStatic == true
+	local aIsStatic =
+		a.isStatic == true
 
-		local bIsStatic =
-			b.isStatic == true
+	local bIsStatic =
+		b.isStatic == true
 
-		if aIsStatic and bIsStatic then
-			return
-		end
+	if aIsStatic and bIsStatic then
+		return
+	end
 
-		if aIsStatic then
-			b.pos +=
-				normal * overlap
+	local e =
+		getCombinedRestitution(
+			a,
+			b
+		)
 
-			local velAlongNormal =
-				b.vel:Dot(normal)
-
-			if velAlongNormal < 0 then
-				local e =
-					math.min(
-						a.restitution or 0.5,
-						b.restitution or 0.5
-					)
-
-				b.vel -=
-					(1 + e)
-					* velAlongNormal
-					* normal
-			end
-
-			return
-		elseif bIsStatic then
-			a.pos -=
-				normal * overlap
-
-			local velAlongNormal =
-				a.vel:Dot(normal)
-
-			if velAlongNormal > 0 then
-				local e =
-					math.min(
-						a.restitution or 0.5,
-						b.restitution or 0.5
-					)
-
-				a.vel -=
-					(1 + e)
-					* velAlongNormal
-					* normal
-			end
-
-			return
-		end
-
-		local totalMass =
-			a.mass + b.mass
-
-		a.pos -=
-			normal
-			* overlap
-			* (b.mass / totalMass)
-
+	if aIsStatic then
 		b.pos +=
-			normal
-			* overlap
-			* (a.mass / totalMass)
-
-		local relativeVel =
-			b.vel - a.vel
+			normal * overlap
 
 		local velAlongNormal =
-			relativeVel:Dot(normal)
+			b.vel:Dot(normal)
 
 		if velAlongNormal < 0 then
-			local speed =
-				relativeVel.Magnitude
-
-			local eBase =
-				math.min(
-					a.restitution,
-					b.restitution
-				)
-
-			local e =
-				speed < 30
-				and eBase * 0.2
-				or eBase
-
-			local impulseMagnitude =
-				-(1 + e)
+			b.vel -=
+				(1 + e)
 				* velAlongNormal
-				/ (
-					1 / a.mass
-					+ 1 / b.mass
-				)
-
-			local impulse =
-				normal * impulseMagnitude
-
-			a.vel -=
-				impulse / a.mass
-
-			b.vel +=
-				impulse / b.mass
+				* normal
 		end
+
+		return
+	end
+
+	if bIsStatic then
+		a.pos -=
+			normal * overlap
+
+		local velAlongNormal =
+			a.vel:Dot(normal)
+
+		if velAlongNormal > 0 then
+			a.vel -=
+				(1 + e)
+				* velAlongNormal
+				* normal
+		end
+
+		return
+	end
+
+	local totalMass =
+		a.mass + b.mass
+
+	a.pos -=
+		normal
+		* overlap
+		* (b.mass / totalMass)
+
+	b.pos +=
+		normal
+		* overlap
+		* (a.mass / totalMass)
+
+	local relativeVel =
+		b.vel - a.vel
+
+	local velAlongNormal =
+		relativeVel:Dot(normal)
+
+	if velAlongNormal < 0 then
+		local impulseMagnitude =
+			-(1 + e)
+			* velAlongNormal
+			/ (
+				1 / a.mass
+				+ 1 / b.mass
+			)
+
+		local impulse =
+			normal * impulseMagnitude
+
+		a.vel -=
+			impulse / a.mass
+
+		b.vel +=
+			impulse / b.mass
 	end
 end
 
@@ -1378,14 +1542,12 @@ local function resolvePlayerVsSegment(
 		)
 
 	elseif player.kind == "segment" then
-		-- Segment-vs-segment does not currently have
-		-- rotational physics. Resolve translational
-		-- overlap using the same capsule representation.
 		local a1, a2, radA =
 			getPlayerSegment(player)
 
 		local b1 = segment.a
 		local b2 = segment.b
+
 		local radB =
 			(segment.thickness or 0) * 0.5
 
@@ -1400,86 +1562,95 @@ local function resolvePlayerVsSegment(
 		local minDist =
 			radA + radB
 
-		if dist < minDist then
-			local delta =
-				pA - pB
+		if dist >= minDist then
+			return
+		end
 
-			local normal =
-				dist > 0.0001
-				and delta / dist
-				or Vector2.new(0, 1)
+		local delta =
+			pA - pB
 
-			local overlap =
-				minDist - dist
+		local normal =
+			dist > 0.0001
+			and delta / dist
+			or Vector2.new(0, 1)
 
-			local segmentIsStatic =
-				segment.isStatic ~= false
+		local overlap =
+			minDist - dist
 
-			if not segmentIsStatic then
-				local segmentVel =
-					segment.vel or Vector2.zero
+		local segmentIsStatic =
+			segment.isStatic ~= false
 
-				local playerVel =
-					player.vel
+		local e =
+			getCombinedRestitution(
+				player,
+				segment
+			)
 
-				local relativeVel =
-					playerVel - segmentVel
+		if not segmentIsStatic then
+			local segmentVel =
+				segment.vel or Vector2.zero
 
-				local velAlongNormal =
-					relativeVel:Dot(normal)
+			local playerVel =
+				player.vel
 
-				player.a -=
-					normal * overlap * 0.5
+			local relativeVel =
+				playerVel - segmentVel
 
-				player.b -=
-					normal * overlap * 0.5
+			local velAlongNormal =
+				relativeVel:Dot(normal)
 
-				segment.a +=
-					normal * overlap * 0.5
+			player.a -=
+				normal
+				* overlap
+				* 0.5
 
-				segment.b +=
-					normal * overlap * 0.5
+			player.b -=
+				normal
+				* overlap
+				* 0.5
 
-				if velAlongNormal < 0 then
-					local e =
-						math.min(
-							player.restitution,
-							segment.restitution or 0.1
-						)
+			segment.a +=
+				normal
+				* overlap
+				* 0.5
 
-					local impulse =
-						-(1 + e)
-						* velAlongNormal
+			segment.b +=
+				normal
+				* overlap
+				* 0.5
 
-					player.vel +=
-						normal * impulse * 0.5
+			if velAlongNormal < 0 then
+				local impulse =
+					-(1 + e)
+					* velAlongNormal
 
-					segment.vel =
-						segmentVel
-						- normal * impulse * 0.5
-				end
-			else
-				player.a +=
-					normal * overlap
+				player.vel +=
+					normal
+					* impulse
+					* 0.5
 
-				player.b +=
-					normal * overlap
+				segment.vel =
+					segmentVel
+					- normal
+					* impulse
+					* 0.5
+			end
 
-				local velAlongNormal =
-					player.vel:Dot(normal)
+		else
+			player.a +=
+				normal * overlap
 
-				if velAlongNormal < 0 then
-					local e =
-						math.min(
-							player.restitution,
-							segment.restitution or 0.1
-						)
+			player.b +=
+				normal * overlap
 
-					player.vel -=
-						(1 + e)
-						* velAlongNormal
-						* normal
-				end
+			local velAlongNormal =
+				player.vel:Dot(normal)
+
+			if velAlongNormal < 0 then
+				player.vel -=
+					(1 + e)
+					* velAlongNormal
+					* normal
 			end
 		end
 	end
@@ -1645,38 +1816,50 @@ local function resolvePlayerVsPlayer(
 	end
 
 	if aStatic then
-		b.a += normal * overlap
-		b.b += normal * overlap
+	b.a += normal * overlap
+	b.b += normal * overlap
 
-		local velAlongNormal =
-			b.vel:Dot(normal)
+	local velAlongNormal =
+		b.vel:Dot(normal)
 
-		if velAlongNormal < 0 then
-			b.vel -=
-				(1 + b.restitution)
-				* velAlongNormal
-				* normal
-		end
+	if velAlongNormal < 0 then
+		local e =
+			getCombinedRestitution(
+				a,
+				b
+			)
 
-		return
+		b.vel -=
+			(1 + e)
+			* velAlongNormal
+			* normal
 	end
 
-	if bStatic then
-		a.a -= normal * overlap
-		a.b -= normal * overlap
+	return
+end
 
-		local velAlongNormal =
-			a.vel:Dot(normal)
+if bStatic then
+	a.a -= normal * overlap
+	a.b -= normal * overlap
 
-		if velAlongNormal > 0 then
-			a.vel -=
-				(1 + a.restitution)
-				* velAlongNormal
-				* normal
-		end
+	local velAlongNormal =
+		a.vel:Dot(normal)
 
-		return
+	if velAlongNormal > 0 then
+		local e =
+			getCombinedRestitution(
+				a,
+				b
+			)
+
+		a.vel -=
+			(1 + e)
+			* velAlongNormal
+			* normal
 	end
+
+	return
+end
 
 	local totalMass =
 		a.mass + b.mass
@@ -1702,35 +1885,35 @@ local function resolvePlayerVsPlayer(
 		* (a.mass / totalMass)
 
 	local relativeVel =
-		b.vel - a.vel
+	b.vel - a.vel
 
-	local velAlongNormal =
-		relativeVel:Dot(normal)
+local velAlongNormal =
+	relativeVel:Dot(normal)
 
-	if velAlongNormal < 0 then
-		local e =
-			math.min(
-				a.restitution,
-				b.restitution
-			)
+if velAlongNormal < 0 then
+	local e =
+		getCombinedRestitution(
+			a,
+			b
+		)
 
-		local impulseMagnitude =
-			-(1 + e)
-			* velAlongNormal
-			/ (
-				1 / a.mass
-				+ 1 / b.mass
-			)
+	local impulseMagnitude =
+		-(1 + e)
+		* velAlongNormal
+		/ (
+			1 / a.mass
+			+ 1 / b.mass
+		)
 
-		local impulse =
-			normal * impulseMagnitude
+	local impulse =
+		normal * impulseMagnitude
 
-		a.vel -=
-			impulse / a.mass
+	a.vel -=
+		impulse / a.mass
 
-		b.vel +=
-			impulse / b.mass
-	end
+	b.vel +=
+		impulse / b.mass
+end
 end
 
 ----------------------------------------------------
@@ -1751,7 +1934,7 @@ function PhysicsEngine.tryKick(
 	if
 		currentTick
 		- (pData.lastKickTick or -9999)
-		< kickCooldownTicks
+			< kickCooldownTicks
 	then
 		return
 	end
@@ -1805,7 +1988,7 @@ function PhysicsEngine.tryKick(
 			then
 				local delta =
 					objectCenter
-					- playerCenter
+				- playerCenter
 
 				local dist =
 					delta.Magnitude
@@ -2026,21 +2209,6 @@ function PhysicsEngine.Step(
 				broadphase,
 				pData
 			)
-		end
-	end
-
-	------------------------------------------------
-	-- DISCS
-	------------------------------------------------
-
-	for _, disc in ipairs(discs) do
-		if disc.isStatic == false then
-			disc.vel =
-				(disc.vel or Vector2.zero)
-				* (disc.damping or 0.98)
-
-			disc.pos +=
-				disc.vel * fixedDt
 		end
 	end
 
