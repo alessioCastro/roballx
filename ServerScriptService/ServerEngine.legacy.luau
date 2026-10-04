@@ -28,7 +28,6 @@ if not gameSnapshotEvent then
 end
 
 local currentMap = MapData.Default
-local phys = currentMap.physics
 
 ----------------------------------------------------
 -- CONVERSOR DE STRINGS DE GRUPOS EM BITMASKS
@@ -119,24 +118,14 @@ local function processSegments(rawSegments: { any }): { PhysicsEngine.Segment }
 end
 
 ----------------------------------------------------
--- INICIALIZAÇÃO DA BOLA E ELEMENTOS FÍSICOS
+-- INICIALIZAÇÃO DOS ELEMENTOS FÍSICOS
 ----------------------------------------------------
-local ball: PhysicsEngine.CircleObject = {
-	pos = currentMap.spawns.ball,
-	vel = Vector2.zero,
-	radius = phys.ballRadius,
-	mass = phys.ballMass,
-	restitution = 0.5,
-	isSolid = true,
-	isStatic = false,
-	cGroup = buildBitmask(phys.ballGroup),
-	cMask = buildBitmask(phys.ballMask)
-}
 
 local playersData: { [number]: PhysicsEngine.CircleObject } = {}
-local sortedUserIds: { number } = {} -- lista ordenada para iteração determinística
+local sortedUserIds: { number } = {}
 
 local discs: { PhysicsEngine.CircleObject } = {}
+
 if currentMap.discs then
 	for idx, disc in ipairs(currentMap.discs) do
 		table.insert(discs, {
@@ -155,14 +144,20 @@ if currentMap.discs then
 	end
 end
 
-local segments: { PhysicsEngine.Segment } = processSegments(currentMap.segments)
+local segments: { PhysicsEngine.Segment } =
+	processSegments(currentMap.segments)
 
 local shapes: { PhysicsEngine.PhysicalShape } = {}
+
 if currentMap.shapes then
 	for idx, shape in ipairs(currentMap.shapes) do
 		local cornerPx = 0
+
 		if typeof(shape.cornerRadius) == "UDim" then
-			cornerPx = math.min(shape.size.X, shape.size.Y) * shape.cornerRadius.Scale + shape.cornerRadius.Offset
+			cornerPx =
+				math.min(shape.size.X, shape.size.Y)
+				* shape.cornerRadius.Scale
+				+ shape.cornerRadius.Offset
 		elseif typeof(shape.cornerRadius) == "number" then
 			cornerPx = shape.cornerRadius
 		end
@@ -192,7 +187,55 @@ if currentMap.shapes then
 	end
 end
 
+----------------------------------------------------
+-- OBJETOS CHUTÁVEIS
+----------------------------------------------------
+
+local objectsById: { [string]: any } = {}
+
+for _, object in ipairs(discs) do
+	if object.id then
+		objectsById[object.id] = object
+	end
+end
+
+for _, object in ipairs(shapes) do
+	if object.id then
+		objectsById[object.id] = object
+	end
+end
+
+for _, object in ipairs(segments) do
+	if object.id then
+		objectsById[object.id] = object
+	end
+end
+
+local kickableObjects: { PhysicsEngine.CircleObject } = {}
+
+local kickableIds =
+	currentMap.gameplay
+	and currentMap.gameplay.kickable
+
+if kickableIds then
+	for _, id in ipairs(kickableIds) do
+		local object = objectsById[id]
+
+		if object
+			and object.pos
+			and object.radius
+		then
+			kickableObjects[#kickableObjects + 1] = object
+		end
+	end
+end
+
+----------------------------------------------------
+-- OBJETOS DINÂMICOS
+----------------------------------------------------
+
 local dynamicDiscs = {}
+
 for _, d in ipairs(discs) do
 	if not d.isStatic then
 		dynamicDiscs[#dynamicDiscs + 1] = d
@@ -200,6 +243,7 @@ for _, d in ipairs(discs) do
 end
 
 local dynamicSegments = {}
+
 for _, seg in ipairs(segments) do
 	if not seg.isStatic then
 		dynamicSegments[#dynamicSegments + 1] = seg
@@ -207,13 +251,19 @@ for _, seg in ipairs(segments) do
 end
 
 local dynamicShapes = {}
+
 for _, s in ipairs(shapes) do
 	if not s.isStatic then
 		dynamicShapes[#dynamicShapes + 1] = s
 	end
 end
 
+----------------------------------------------------
+-- OBJETOS DE COLISÃO
+----------------------------------------------------
+
 local collisionDiscs = {}
+
 for _, d in ipairs(discs) do
 	if d.isSolid ~= false then
 		collisionDiscs[#collisionDiscs + 1] = d
@@ -221,6 +271,7 @@ for _, d in ipairs(discs) do
 end
 
 local collisionSegments = {}
+
 for _, seg in ipairs(segments) do
 	if seg.isSolid ~= false then
 		collisionSegments[#collisionSegments + 1] = seg
@@ -228,11 +279,16 @@ for _, seg in ipairs(segments) do
 end
 
 local collisionShapes = {}
+
 for _, s in ipairs(shapes) do
 	if s.isSolid ~= false then
 		collisionShapes[#collisionShapes + 1] = s
 	end
 end
+
+----------------------------------------------------
+-- BROADPHASE
+----------------------------------------------------
 
 local broadphase = PhysicsEngine.createBroadphase(
 	collisionDiscs,
@@ -274,21 +330,40 @@ end
 ----------------------------------------------------
 Players.PlayerAdded:Connect(function(plr)
 	local isRed = (#Players:GetPlayers() % 2 ~= 0)
+
+	local playerGameplay = currentMap.gameplay.player
+
+	local spawnPosition =
+		isRed
+		and playerGameplay.spawn.Red
+		or playerGameplay.spawn.Blue
+
 	playersData[plr.UserId] = {
-		pos = isRed and currentMap.spawns.red or currentMap.spawns.blue,
+		pos = spawnPosition,
 		vel = Vector2.zero,
-		radius = phys.playerRadius,
-		mass = phys.playerMass,
+
+		radius = playerGameplay.radius,
+		mass = playerGameplay.mass,
 		restitution = 0.1,
+
 		team = isRed and "Red" or "Blue",
+
 		input = Vector2.zero,
 		isKicking = false,
 		lastKickTick = -9999,
+
 		isSolid = true,
 		isStatic = false,
-		cGroup = buildBitmask(phys.playerGroup),
-		cMask = buildBitmask(phys.playerMask)
+
+		cGroup = buildBitmask(
+			playerGameplay.collision.group
+		),
+
+		cMask = buildBitmask(
+			playerGameplay.collision.mask
+		)
 	}
+
 	rebuildSortedUserIds()
 end)
 
@@ -339,10 +414,10 @@ RunService.Heartbeat:Connect(function(dt)
 		applyInputsForTick(currentTick)
 
 		-- 2. Step da física
-		PhysicsEngine.Step(ball, playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, phys, FIXED_DT, currentTick)
+		PhysicsEngine.Step(playersData, sortedUserIds, discs, segments, shapes, collisionDiscs, collisionSegments, collisionShapes, broadphase, currentMap.gameplay.player, currentMap.gameplay.kick, kickableObjects, FIXED_DT, currentTick)
 
 		-- 3. Checar gols (determinístico, tick-based)
-		MatchManager.CheckGoals(ball, currentMap, playersData)
+		MatchManager.CheckGoals(currentMap, playersData, discs, segments, shapes)
 
 		-- 4. Avançar tick
 		currentTick += 1
