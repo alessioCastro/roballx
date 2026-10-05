@@ -474,13 +474,16 @@ local function crossScalar(
 end
 
 local function crossOmegaVector(
-	omega: number,
-	r: Vector2
+    angularVelocity: number,
+    r: Vector2
 ): Vector2
-	return Vector2.new(
-		-omega * r.Y,
-		omega * r.X
-	)
+    local omega =
+        math.rad(angularVelocity)
+
+    return Vector2.new(
+        -omega * r.Y,
+        omega * r.X
+    )
 end
 
 local function getCircleInertia(
@@ -590,12 +593,17 @@ local function applyAngularImpulse(
 		return
 	end
 
-	object.angularVelocity =
-		getAngularVelocity(object)
-		+ crossScalar(
+	local angularDeltaRadians =
+		crossScalar(
 			contactVector,
 			impulse
 		) * inverseInertia
+
+	object.angularVelocity =
+		getAngularVelocity(object)
+		+ math.deg(
+			angularDeltaRadians
+		)
 end
 
 local function getContactVelocity(
@@ -909,38 +917,92 @@ function PhysicsEngine.resolveShapeCollision(
 	local overlap =
 		minDist - dist
 
-	if shapeIsStatic then
-		obj.pos +=
-			normal * overlap
+	------------------------------------------------
+	-- INVERSE MASS
+	------------------------------------------------
 
-	elseif objIsStatic then
-		shape.pos -=
-			normal * overlap
+	local objInverseMass =
+		objIsStatic
+		and 0
+		or 1 / obj.mass
 
-	else
-		local totalMass =
-			obj.mass + shapeMass
+	local shapeInverseMass =
+		shapeIsStatic
+		and 0
+		or 1 / shapeMass
 
-		obj.pos +=
-			normal
-			* overlap
-			* (shapeMass / totalMass)
+	local totalInverseMass =
+		objInverseMass
+		+ shapeInverseMass
 
-		shape.pos -=
-			normal
-			* overlap
-			* (obj.mass / totalMass)
+	if totalInverseMass <= 0 then
+		return
 	end
 
-	local relVel =
-		obj.vel - shapeVel
+	------------------------------------------------
+	-- POSITION CORRECTION
+	------------------------------------------------
+
+	obj.pos +=
+		normal
+		* overlap
+		* (
+			objInverseMass
+			/ totalInverseMass
+		)
+
+	shape.pos -=
+		normal
+		* overlap
+		* (
+			shapeInverseMass
+			/ totalInverseMass
+		)
+
+	------------------------------------------------
+	-- CONTACT POINT
+	------------------------------------------------
+
+	local contactPoint =
+		obj.pos
+		- normal * obj.radius
+
+	local rObj =
+		contactPoint - obj.pos
+
+	local rShape =
+		contactPoint - shape.pos
+
+	------------------------------------------------
+	-- RELATIVE CONTACT VELOCITY
+	------------------------------------------------
+
+	local objContactVelocity =
+		getContactVelocity(
+			obj,
+			rObj
+		)
+
+	local shapeContactVelocity =
+		getContactVelocity(
+			shape,
+			rShape
+		)
+
+	local relativeVelocity =
+		objContactVelocity
+		- shapeContactVelocity
 
 	local velAlongNormal =
-		relVel:Dot(normal)
+		relativeVelocity:Dot(normal)
 
 	if velAlongNormal >= 0 then
 		return
 	end
+
+	------------------------------------------------
+	-- RESTITUTION
+	------------------------------------------------
 
 	local e =
 		getCombinedRestitution(
@@ -948,38 +1010,83 @@ function PhysicsEngine.resolveShapeCollision(
 			shape
 		)
 
-	if shapeIsStatic then
-		obj.vel -=
-			(1 + e)
-			* velAlongNormal
-			* normal
+	------------------------------------------------
+	-- ROTATIONAL TERMS
+	------------------------------------------------
 
-	elseif objIsStatic then
-		shape.vel =
-			shapeVel
-			+ (1 + e)
-			* velAlongNormal
-			* normal
+	local objInverseInertia =
+		getInverseInertia(obj)
 
-	else
-		local impulseMag =
-			-(1 + e)
-			* velAlongNormal
-			/ (
-				1 / obj.mass
-				+ 1 / shapeMass
-			)
+	local shapeInverseInertia =
+		getInverseInertia(shape)
 
-		local impulse =
-			normal * impulseMag
+	local rotationalObj =
+		crossScalar(
+			rObj,
+			normal
+		)
 
-		obj.vel +=
-			impulse / obj.mass
+	local rotationalShape =
+		crossScalar(
+			rShape,
+			normal
+		)
 
-		shape.vel =
-			shapeVel
-			- impulse / shapeMass
+	local denominator =
+		totalInverseMass
+		+ rotationalObj
+			* rotationalObj
+			* objInverseInertia
+		+ rotationalShape
+			* rotationalShape
+			* shapeInverseInertia
+
+	if denominator <= 0 then
+		return
 	end
+
+	------------------------------------------------
+	-- IMPULSE
+	------------------------------------------------
+
+	local impulseMagnitude =
+		-(1 + e)
+		* velAlongNormal
+		/ denominator
+
+	local impulse =
+		normal * impulseMagnitude
+
+	------------------------------------------------
+	-- LINEAR VELOCITY
+	------------------------------------------------
+
+	if not objIsStatic then
+		obj.vel +=
+			impulse * objInverseMass
+	end
+
+	if not shapeIsStatic then
+		shape.vel =
+			shapeVel
+			- impulse * shapeInverseMass
+	end
+
+	------------------------------------------------
+	-- ANGULAR VELOCITY
+	------------------------------------------------
+
+	applyAngularImpulse(
+		obj,
+		rObj,
+		impulse
+	)
+
+	applyAngularImpulse(
+		shape,
+		rShape,
+		-impulse
+	)
 end
 
 ----------------------------------------------------
@@ -1049,11 +1156,90 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 	local massB =
 		sB.mass or 1
 
-	local velA =
-		sA.vel or Vector2.zero
+	------------------------------------------------
+	-- INVERSE MASS
+	------------------------------------------------
 
-	local velB =
-		sB.vel or Vector2.zero
+	local inverseMassA =
+		aIsStatic
+		and 0
+		or 1 / massA
+
+	local inverseMassB =
+		bIsStatic
+		and 0
+		or 1 / massB
+
+	local totalInverseMass =
+		inverseMassA
+		+ inverseMassB
+
+	if totalInverseMass <= 0 then
+		return
+	end
+
+	------------------------------------------------
+	-- POSITION CORRECTION
+	------------------------------------------------
+
+	sA.pos -=
+		normal
+		* overlap
+		* (
+			inverseMassA
+			/ totalInverseMass
+		)
+
+	sB.pos +=
+		normal
+		* overlap
+		* (
+			inverseMassB
+			/ totalInverseMass
+		)
+
+	------------------------------------------------
+	-- CONTACT POINTS
+	------------------------------------------------
+
+	local contactPoint =
+		(pA + pB) * 0.5
+
+	local rA =
+		contactPoint - sA.pos
+
+	local rB =
+		contactPoint - sB.pos
+
+	------------------------------------------------
+	-- RELATIVE CONTACT VELOCITY
+	------------------------------------------------
+
+	local velocityA =
+		getContactVelocity(
+			sA,
+			rA
+		)
+
+	local velocityB =
+		getContactVelocity(
+			sB,
+			rB
+		)
+
+	local relativeVelocity =
+		velocityB - velocityA
+
+	local velAlongNormal =
+		relativeVelocity:Dot(normal)
+
+	if velAlongNormal >= 0 then
+		return
+	end
+
+	------------------------------------------------
+	-- RESTITUTION
+	------------------------------------------------
 
 	local e =
 		getCombinedRestitution(
@@ -1061,79 +1247,84 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 			sB
 		)
 
-	if aIsStatic then
-		sB.pos +=
-			normal * overlap
+	------------------------------------------------
+	-- ROTATIONAL TERMS
+	------------------------------------------------
 
-		local velAlongNormal =
-			velB:Dot(normal)
+	local inverseInertiaA =
+		getInverseInertia(sA)
 
-		if velAlongNormal < 0 then
-			sB.vel =
-				velB
-				- (1 + e)
-				* velAlongNormal
-				* normal
-		end
+	local inverseInertiaB =
+		getInverseInertia(sB)
 
+	local rotationalA =
+		crossScalar(
+			rA,
+			normal
+		)
+
+	local rotationalB =
+		crossScalar(
+			rB,
+			normal
+		)
+
+	local denominator =
+		totalInverseMass
+		+ rotationalA
+			* rotationalA
+			* inverseInertiaA
+		+ rotationalB
+			* rotationalB
+			* inverseInertiaB
+
+	if denominator <= 0 then
 		return
 	end
 
-	if bIsStatic then
-		sA.pos -=
-			normal * overlap
+	------------------------------------------------
+	-- IMPULSE
+	------------------------------------------------
 
-		local velAlongNormal =
-			velA:Dot(normal)
+	local impulseMagnitude =
+		-(1 + e)
+		* velAlongNormal
+		/ denominator
 
-		if velAlongNormal > 0 then
-			sA.vel =
-				velA
-				- (1 + e)
-				* velAlongNormal
-				* normal
-		end
+	local impulse =
+		normal * impulseMagnitude
 
-		return
-	end
+	------------------------------------------------
+	-- LINEAR VELOCITY
+	------------------------------------------------
 
-	local totalMass =
-		massA + massB
-
-	sA.pos -=
-		normal
-		* overlap
-		* (massB / totalMass)
-
-	sB.pos +=
-		normal
-		* overlap
-		* (massA / totalMass)
-
-	local relVel =
-		velB - velA
-
-	local velAlongNormal =
-		relVel:Dot(normal)
-
-	if velAlongNormal < 0 then
-		local impulseMag =
-			-(1 + e)
-			* velAlongNormal
-			/ (
-				1 / massA
-				+ 1 / massB
-			)
-
-		local impulse =
-			normal * impulseMag
-
+	if not aIsStatic then
 		sA.vel =
-			velA - impulse / massA
-
-		sB.vel =
-			velB + impulse / massB
+			(sA.vel or Vector2.zero)
+			- impulse * inverseMassA
 	end
+
+	if not bIsStatic then
+		sB.vel =
+			(sB.vel or Vector2.zero)
+			+ impulse * inverseMassB
+	end
+
+	------------------------------------------------
+	-- ANGULAR VELOCITY
+	------------------------------------------------
+
+	applyAngularImpulse(
+		sA,
+		rA,
+		-impulse
+	)
+
+	applyAngularImpulse(
+		sB,
+		rB,
+		impulse
+	)
 end
 
 ----------------------------------------------------
@@ -1211,97 +1402,182 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 			seg
 		)
 
-	if segIsStatic and not shapeIsStatic then
-		shape.pos +=
-			normal * overlap
+	------------------------------------------------
+	-- INVERSE MASS
+	------------------------------------------------
 
-		local relVel =
-			shapeVel - segVel
+	local inverseMassShape =
+		shapeIsStatic
+		and 0
+		or 1 / shapeMass
 
-		local velAlongNormal =
-			relVel:Dot(normal)
+	local inverseMassSeg =
+		segIsStatic
+		and 0
+		or 1 / segMass
 
-		if velAlongNormal < 0 then
-			shape.vel =
-				shapeVel
-				- (1 + e)
-				* velAlongNormal
-				* normal
-		end
+	local totalInverseMass =
+		inverseMassShape
+		+ inverseMassSeg
 
+	if totalInverseMass <= 0 then
 		return
 	end
 
-	if shapeIsStatic and not segIsStatic then
+	------------------------------------------------
+	-- POSITION CORRECTION
+	------------------------------------------------
+
+	local shapeCorrection =
+		normal
+		* overlap
+		* (
+			inverseMassShape
+			/ totalInverseMass
+		)
+
+	local segmentCorrection =
+		normal
+		* overlap
+		* (
+			inverseMassSeg
+			/ totalInverseMass
+		)
+
+	if not shapeIsStatic then
+		shape.pos +=
+			shapeCorrection
+	end
+
+	if not segIsStatic then
 		seg.a -=
-			normal * overlap
+			segmentCorrection
 
 		seg.b -=
-			normal * overlap
+			segmentCorrection
+	end
 
-		local relVel =
-			shapeVel - segVel
+	------------------------------------------------
+	-- CONTACT POINTS
+	------------------------------------------------
 
-		local velAlongNormal =
-			relVel:Dot(normal)
+	local contactPoint =
+		(pShape + pSeg) * 0.5
 
-		if velAlongNormal > 0 then
-			seg.vel =
-				segVel
-				+ (1 + e)
-				* velAlongNormal
-				* normal
-		end
+	local rShape =
+		contactPoint - shape.pos
 
+	local segmentCenter =
+		(seg.a + seg.b) * 0.5
+
+	local rSeg =
+		contactPoint - segmentCenter
+
+	------------------------------------------------
+	-- RELATIVE CONTACT VELOCITY
+	------------------------------------------------
+
+	local shapeContactVelocity =
+		getContactVelocity(
+			shape,
+			rShape
+		)
+
+	local segmentContactVelocity =
+		getContactVelocity(
+			seg,
+			rSeg
+		)
+
+	local relativeVelocity =
+		shapeContactVelocity
+		- segmentContactVelocity
+
+	local velAlongNormal =
+		relativeVelocity:Dot(normal)
+
+	if velAlongNormal >= 0 then
 		return
 	end
 
-	if not shapeIsStatic and not segIsStatic then
-		local totalMass =
-			shapeMass + segMass
+	------------------------------------------------
+	-- ROTATIONAL TERMS
+	------------------------------------------------
 
-		shape.pos +=
+	local inverseInertiaShape =
+		getInverseInertia(shape)
+
+	local inverseInertiaSeg =
+		getInverseInertia(seg)
+
+	local rotationalShape =
+		crossScalar(
+			rShape,
 			normal
-			* overlap
-			* (segMass / totalMass)
+		)
 
-		seg.a -=
+	local rotationalSeg =
+		crossScalar(
+			rSeg,
 			normal
-			* overlap
-			* (shapeMass / totalMass)
+		)
 
-		seg.b -=
-			normal
-			* overlap
-			* (shapeMass / totalMass)
+	local denominator =
+		totalInverseMass
+		+ rotationalShape
+			* rotationalShape
+			* inverseInertiaShape
+		+ rotationalSeg
+			* rotationalSeg
+			* inverseInertiaSeg
 
-		local relVel =
-			shapeVel - segVel
-
-		local velAlongNormal =
-			relVel:Dot(normal)
-
-		if velAlongNormal < 0 then
-			local impulseMag =
-				-(1 + e)
-				* velAlongNormal
-				/ (
-					1 / shapeMass
-					+ 1 / segMass
-				)
-
-			local impulse =
-				normal * impulseMag
-
-			shape.vel =
-				shapeVel
-				+ impulse / shapeMass
-
-			seg.vel =
-				segVel
-				- impulse / segMass
-		end
+	if denominator <= 0 then
+		return
 	end
+
+	------------------------------------------------
+	-- IMPULSE
+	------------------------------------------------
+
+	local impulseMagnitude =
+		-(1 + e)
+		* velAlongNormal
+		/ denominator
+
+	local impulse =
+		normal * impulseMagnitude
+
+	------------------------------------------------
+	-- LINEAR VELOCITY
+	------------------------------------------------
+
+	if not shapeIsStatic then
+		shape.vel =
+			shapeVel
+			+ impulse * inverseMassShape
+	end
+
+	if not segIsStatic then
+		seg.vel =
+			segVel
+			- impulse * inverseMassSeg
+	end
+
+	------------------------------------------------
+	-- ANGULAR VELOCITY
+	------------------------------------------------
+
+	applyAngularImpulse(
+		shape,
+		rShape,
+		impulse
+	)
+
+	applyAngularImpulse(
+		seg,
+		rSeg,
+		-impulse
+	)
 end
 
 ----------------------------------------------------
@@ -1365,7 +1641,13 @@ function PhysicsEngine.resolveSegmentCollision(
 	local dist =
 		delta.Magnitude
 
-	if dist >= obj.radius then
+	local segRadius =
+		(seg.thickness or 0) * 0.5
+
+	local minDist =
+		obj.radius + segRadius
+
+	if dist >= minDist then
 		return
 	end
 
@@ -1383,7 +1665,7 @@ function PhysicsEngine.resolveSegmentCollision(
 	end
 
 	local overlap =
-		obj.radius - dist
+		minDist - dist
 
 	local segVel =
 		seg.vel or Vector2.zero
@@ -1394,8 +1676,35 @@ function PhysicsEngine.resolveSegmentCollision(
 	local objIsStatic =
 		obj.isStatic == true
 
+	local objMass =
+		math.max(
+			obj.mass,
+			0.000001
+		)
+
 	local segMass =
-		seg.mass or 1
+		math.max(
+			seg.mass or 1,
+			0.000001
+		)
+
+	local inverseMassObj =
+		objIsStatic
+		and 0
+		or 1 / objMass
+
+	local inverseMassSeg =
+		segIsStatic
+		and 0
+		or 1 / segMass
+
+	local totalInverseMass =
+		inverseMassObj
+		+ inverseMassSeg
+
+	if totalInverseMass <= 0 then
+		return
+	end
 
 	local e =
 		getCombinedRestitution(
@@ -1403,112 +1712,171 @@ function PhysicsEngine.resolveSegmentCollision(
 			seg
 		)
 
-	if segIsStatic and not objIsStatic then
-		obj.pos +=
-			normal * overlap
+	------------------------------------------------
+	-- POSITION CORRECTION
+	------------------------------------------------
 
-		local relVel =
-			obj.vel - segVel
-
-		local velAlongNormal =
-			relVel:Dot(normal)
-
-		if velAlongNormal < 0 then
-			obj.vel -=
-				(1 + e)
-				* velAlongNormal
-				* normal
-		end
-
-		return
-	end
-
-	if objIsStatic and not segIsStatic then
-		seg.a -=
-			normal * overlap
-
-		seg.b -=
-			normal * overlap
-
-		local relVel =
-			obj.vel - segVel
-
-		local velAlongNormal =
-			relVel:Dot(normal)
-
-		if velAlongNormal > 0 then
-			seg.vel =
-				segVel
-				+ (1 + e)
-				* velAlongNormal
-				* normal
-		end
-
-		return
-	end
-
-	if not objIsStatic and not segIsStatic then
-		local totalMass =
-			obj.mass + segMass
-
+	if not objIsStatic then
 		obj.pos +=
 			normal
 			* overlap
-			* (segMass / totalMass)
+			* (
+				inverseMassObj
+				/ totalInverseMass
+			)
+	end
+
+	if not segIsStatic then
+		local correction =
+			normal
+			* overlap
+			* (
+				inverseMassSeg
+				/ totalInverseMass
+			)
 
 		seg.a -=
-			normal
-			* overlap
-			* (obj.mass / totalMass)
+			correction
 
 		seg.b -=
-			normal
-			* overlap
-			* (obj.mass / totalMass)
-
-		local relativeVel =
-			obj.vel - segVel
-
-		local velAlongNormal =
-			relativeVel:Dot(normal)
-
-		if velAlongNormal < 0 then
-			local impulseMagnitude =
-				-(1 + e)
-				* velAlongNormal
-				/ (
-					1 / obj.mass
-					+ 1 / segMass
-				)
-
-			local impulse =
-				normal * impulseMagnitude
-
-			obj.vel +=
-				impulse / obj.mass
-
-			seg.vel =
-				segVel
-				- impulse / segMass
-		end
+			correction
 	end
+
+	------------------------------------------------
+	-- CONTACT POINTS
+	------------------------------------------------
+
+	local contactPoint =
+		closest
+		+ normal * segRadius
+
+	local rObj =
+		contactPoint - obj.pos
+
+	local segmentCenter =
+		(seg.a + seg.b) * 0.5
+
+	local rSeg =
+		contactPoint - segmentCenter
+
+	------------------------------------------------
+	-- RELATIVE CONTACT VELOCITY
+	------------------------------------------------
+
+	local objContactVelocity =
+		getContactVelocity(
+			obj,
+			rObj
+		)
+
+	local segContactVelocity =
+		getContactVelocity(
+			seg,
+			rSeg
+		)
+
+	local relativeVelocity =
+		objContactVelocity
+		- segContactVelocity
+
+	local velAlongNormal =
+		relativeVelocity:Dot(normal)
+
+	if velAlongNormal >= 0 then
+		return
+	end
+
+	------------------------------------------------
+	-- ROTATIONAL TERMS
+	------------------------------------------------
+
+	local inverseInertiaObj =
+		getInverseInertia(obj)
+
+	local inverseInertiaSeg =
+		getInverseInertia(seg)
+
+	local rotationalObj =
+		crossScalar(
+			rObj,
+			normal
+		)
+
+	local rotationalSeg =
+		crossScalar(
+			rSeg,
+			normal
+		)
+
+	local denominator =
+		totalInverseMass
+		+ rotationalObj
+			* rotationalObj
+			* inverseInertiaObj
+		+ rotationalSeg
+			* rotationalSeg
+			* inverseInertiaSeg
+
+	if denominator <= 0 then
+		return
+	end
+
+	------------------------------------------------
+	-- IMPULSE
+	------------------------------------------------
+
+	local impulseMagnitude =
+		-(1 + e)
+		* velAlongNormal
+		/ denominator
+
+	local impulse =
+		normal * impulseMagnitude
+
+	------------------------------------------------
+	-- LINEAR VELOCITY
+	------------------------------------------------
+
+	if not objIsStatic then
+		obj.vel =
+			(obj.vel or Vector2.zero)
+			+ impulse * inverseMassObj
+	end
+
+	if not segIsStatic then
+		seg.vel =
+			segVel
+			- impulse * inverseMassSeg
+	end
+
+	------------------------------------------------
+	-- ANGULAR VELOCITY
+	------------------------------------------------
+
+	applyAngularImpulse(
+		obj,
+		rObj,
+		impulse
+	)
+
+	applyAngularImpulse(
+		seg,
+		rSeg,
+		-impulse
+	)
 end
 
 ----------------------------------------------------
 -- CIRCLE VS CIRCLE
 ----------------------------------------------------
 
-function PhysicsEngine.resolveCircleCollision(
+local function resolveCircleCollision(
 	a: CircleObject,
 	b: CircleObject
 )
-	if not canCollide(a, b) then
-		return
-	end
-
 	if
-		a.isSolid == false
-		or b.isSolid == false
+		a.isStatic == true
+		and b.isStatic == true
 	then
 		return
 	end
@@ -1545,87 +1913,160 @@ function PhysicsEngine.resolveCircleCollision(
 	local bIsStatic =
 		b.isStatic == true
 
-	if aIsStatic and bIsStatic then
-		return
-	end
-
 	local e =
 		getCombinedRestitution(
 			a,
 			b
 		)
 
-	if aIsStatic then
-		b.pos +=
-			normal * overlap
+	local aInverseMass =
+		aIsStatic
+		and 0
+		or 1 / a.mass
 
-		local velAlongNormal =
-			b.vel:Dot(normal)
+	local bInverseMass =
+		bIsStatic
+		and 0
+		or 1 / b.mass
 
-		if velAlongNormal < 0 then
-			b.vel -=
-				(1 + e)
-				* velAlongNormal
-				* normal
-		end
+	local totalInverseMass =
+		aInverseMass
+		+ bInverseMass
 
+	if totalInverseMass <= 0 then
 		return
 	end
 
-	if bIsStatic then
-		a.pos -=
-			normal * overlap
-
-		local velAlongNormal =
-			a.vel:Dot(normal)
-
-		if velAlongNormal > 0 then
-			a.vel -=
-				(1 + e)
-				* velAlongNormal
-				* normal
-		end
-
-		return
-	end
-
-	local totalMass =
-		a.mass + b.mass
+	------------------------------------------------
+	-- POSITION CORRECTION
+	------------------------------------------------
 
 	a.pos -=
 		normal
 		* overlap
-		* (b.mass / totalMass)
+		* (aInverseMass / totalInverseMass)
 
 	b.pos +=
 		normal
 		* overlap
-		* (a.mass / totalMass)
+		* (bInverseMass / totalInverseMass)
 
-	local relativeVel =
-		b.vel - a.vel
+	------------------------------------------------
+	-- CONTACT POINTS
+	------------------------------------------------
+
+	local contactPoint =
+		a.pos
+		+ normal * a.radius
+
+	local rA =
+		contactPoint - a.pos
+
+	local rB =
+		contactPoint - b.pos
+
+	------------------------------------------------
+	-- RELATIVE CONTACT VELOCITY
+	------------------------------------------------
+
+	local velocityA =
+		getContactVelocity(
+			a,
+			rA
+		)
+
+	local velocityB =
+		getContactVelocity(
+			b,
+			rB
+		)
+
+	local relativeVelocity =
+		velocityB - velocityA
 
 	local velAlongNormal =
-		relativeVel:Dot(normal)
+		relativeVelocity:Dot(normal)
 
-	if velAlongNormal < 0 then
-		local impulseMagnitude =
-			-(1 + e)
-			* velAlongNormal
-			/ (
-				1 / a.mass
-				+ 1 / b.mass
-			)
-
-		local impulse =
-			normal * impulseMagnitude
-
-		a.vel -=
-			impulse / a.mass
-
-		b.vel +=
-			impulse / b.mass
+	if velAlongNormal >= 0 then
+		return
 	end
+
+	------------------------------------------------
+	-- IMPULSE DENOMINATOR
+	------------------------------------------------
+
+	local inverseInertiaA =
+		getInverseInertia(a)
+
+	local inverseInertiaB =
+		getInverseInertia(b)
+
+	local rotationalA =
+		crossScalar(
+			rA,
+			normal
+		)
+
+	local rotationalB =
+		crossScalar(
+			rB,
+			normal
+		)
+
+	local denominator =
+		totalInverseMass
+		+ rotationalA
+			* rotationalA
+			* inverseInertiaA
+		+ rotationalB
+			* rotationalB
+			* inverseInertiaB
+
+	if denominator <= 0 then
+		return
+	end
+
+	------------------------------------------------
+	-- NORMAL IMPULSE
+	------------------------------------------------
+
+	local impulseMagnitude =
+		-(1 + e)
+		* velAlongNormal
+		/ denominator
+
+	local impulse =
+		normal * impulseMagnitude
+
+	------------------------------------------------
+	-- LINEAR VELOCITY
+	------------------------------------------------
+
+	if not aIsStatic then
+		a.vel -=
+			impulse * aInverseMass
+	end
+
+	if not bIsStatic then
+		b.vel +=
+			impulse * bInverseMass
+	end
+
+	------------------------------------------------
+	-- ANGULAR VELOCITY
+	------------------------------------------------
+
+	applyAngularImpulse(
+		a,
+		rA,
+		-impulse
+	)
+
+	applyAngularImpulse(
+		b,
+		rB,
+		impulse
+	)
 end
 
 ----------------------------------------------------
@@ -1777,8 +2218,121 @@ local function resolvePlayerVsSegment(
 		local overlap =
 			minDist - dist
 
+		local playerIsStatic =
+			player.isStatic == true
+
 		local segmentIsStatic =
 			segment.isStatic ~= false
+
+		if playerIsStatic and segmentIsStatic then
+			return
+		end
+
+		local playerMass =
+			math.max(
+				player.mass or 1,
+				0.000001
+			)
+
+		local segmentMass =
+			math.max(
+				segment.mass or 1,
+				0.000001
+			)
+
+		local inverseMassPlayer =
+			playerIsStatic
+			and 0
+			or 1 / playerMass
+
+		local inverseMassSegment =
+			segmentIsStatic
+			and 0
+			or 1 / segmentMass
+
+		local totalInverseMass =
+			inverseMassPlayer
+			+ inverseMassSegment
+
+		if totalInverseMass <= 0 then
+			return
+		end
+
+		------------------------------------------------
+		-- POSITION CORRECTION
+		------------------------------------------------
+
+		if not playerIsStatic then
+			local correction =
+				normal
+				* overlap
+				* (
+					inverseMassPlayer
+					/ totalInverseMass
+				)
+
+			player.a += correction
+			player.b += correction
+		end
+
+		if not segmentIsStatic then
+			local correction =
+				normal
+				* overlap
+				* (
+					inverseMassSegment
+					/ totalInverseMass
+				)
+
+			segment.a -= correction
+			segment.b -= correction
+		end
+
+		------------------------------------------------
+		-- CONTACT POINTS
+		------------------------------------------------
+
+		local contactPoint =
+			(pA + pB) * 0.5
+
+		local playerCenter =
+			(player.a + player.b) * 0.5
+
+		local segmentCenter =
+			(segment.a + segment.b) * 0.5
+
+		local rPlayer =
+			contactPoint - playerCenter
+
+		local rSegment =
+			contactPoint - segmentCenter
+
+		------------------------------------------------
+		-- RELATIVE CONTACT VELOCITY
+		------------------------------------------------
+
+		local playerContactVelocity =
+			getContactVelocity(
+				player,
+				rPlayer
+			)
+
+		local segmentContactVelocity =
+			getContactVelocity(
+				segment,
+				rSegment
+			)
+
+		local relativeVelocity =
+			playerContactVelocity
+			- segmentContactVelocity
+
+		local velAlongNormal =
+			relativeVelocity:Dot(normal)
+
+		if velAlongNormal >= 0 then
+			return
+		end
 
 		local e =
 			getCombinedRestitution(
@@ -1786,73 +2340,84 @@ local function resolvePlayerVsSegment(
 				segment
 			)
 
-		if not segmentIsStatic then
-			local segmentVel =
-				segment.vel or Vector2.zero
+		------------------------------------------------
+		-- ROTATIONAL TERMS
+		------------------------------------------------
 
-			local playerVel =
-				player.vel
+		local inverseInertiaPlayer =
+			getInverseInertia(player)
 
-			local relativeVel =
-				playerVel - segmentVel
+		local inverseInertiaSegment =
+			getInverseInertia(segment)
 
-			local velAlongNormal =
-				relativeVel:Dot(normal)
-
-			player.a -=
+		local rotationalPlayer =
+			crossScalar(
+				rPlayer,
 				normal
-				* overlap
-				* 0.5
+			)
 
-			player.b -=
+		local rotationalSegment =
+			crossScalar(
+				rSegment,
 				normal
-				* overlap
-				* 0.5
+			)
 
-			segment.a +=
-				normal
-				* overlap
-				* 0.5
+		local denominator =
+			totalInverseMass
+			+ rotationalPlayer
+				* rotationalPlayer
+				* inverseInertiaPlayer
+			+ rotationalSegment
+				* rotationalSegment
+				* inverseInertiaSegment
 
-			segment.b +=
-				normal
-				* overlap
-				* 0.5
-
-			if velAlongNormal < 0 then
-				local impulse =
-					-(1 + e)
-					* velAlongNormal
-
-				player.vel +=
-					normal
-					* impulse
-					* 0.5
-
-				segment.vel =
-					segmentVel
-					- normal
-					* impulse
-					* 0.5
-			end
-
-		else
-			player.a +=
-				normal * overlap
-
-			player.b +=
-				normal * overlap
-
-			local velAlongNormal =
-				player.vel:Dot(normal)
-
-			if velAlongNormal < 0 then
-				player.vel -=
-					(1 + e)
-					* velAlongNormal
-					* normal
-			end
+		if denominator <= 0 then
+			return
 		end
+
+		------------------------------------------------
+		-- IMPULSE
+		------------------------------------------------
+
+		local impulseMagnitude =
+			-(1 + e)
+			* velAlongNormal
+			/ denominator
+
+		local impulse =
+			normal * impulseMagnitude
+
+		------------------------------------------------
+		-- LINEAR VELOCITY
+		------------------------------------------------
+
+		if not playerIsStatic then
+			player.vel =
+				(player.vel or Vector2.zero)
+				+ impulse * inverseMassPlayer
+		end
+
+		if not segmentIsStatic then
+			segment.vel =
+				(segment.vel or Vector2.zero)
+				- impulse * inverseMassSegment
+		end
+
+		------------------------------------------------
+		-- ANGULAR VELOCITY
+		------------------------------------------------
+
+		applyAngularImpulse(
+			player,
+			rPlayer,
+			impulse
+		)
+
+		applyAngularImpulse(
+			segment,
+			rSegment,
+			-impulse
+		)
 	end
 end
 
@@ -1875,6 +2440,10 @@ local function resolvePlayerVsPlayer(
 		return
 	end
 
+	------------------------------------------------
+	-- DISC × DISC
+	------------------------------------------------
+
 	if
 		a.kind == "disc"
 		and b.kind == "disc"
@@ -1886,6 +2455,10 @@ local function resolvePlayerVsPlayer(
 
 		return
 	end
+
+	------------------------------------------------
+	-- SHAPE × SHAPE
+	------------------------------------------------
 
 	if
 		a.kind == "shape"
@@ -1899,6 +2472,10 @@ local function resolvePlayerVsPlayer(
 		return
 	end
 
+	------------------------------------------------
+	-- SHAPE × DISC
+	------------------------------------------------
+
 	if
 		a.kind == "shape"
 		and b.kind == "disc"
@@ -1923,7 +2500,10 @@ local function resolvePlayerVsPlayer(
 		return
 	end
 
-	-- Segment player against shape/disc.
+	------------------------------------------------
+	-- SEGMENT × SHAPE
+	------------------------------------------------
+
 	if
 		a.kind == "segment"
 		and b.kind == "shape"
@@ -1947,6 +2527,10 @@ local function resolvePlayerVsPlayer(
 
 		return
 	end
+
+	------------------------------------------------
+	-- SEGMENT × DISC
+	------------------------------------------------
 
 	if
 		a.kind == "segment"
@@ -1972,7 +2556,10 @@ local function resolvePlayerVsPlayer(
 		return
 	end
 
-	-- Segment vs segment.
+	------------------------------------------------
+	-- SEGMENT × SEGMENT
+	------------------------------------------------
+
 	local a1, a2, radA =
 		getPlayerSegment(a)
 
@@ -2005,115 +2592,205 @@ local function resolvePlayerVsPlayer(
 	local overlap =
 		minDist - dist
 
-	local aStatic =
+	local aIsStatic =
 		a.isStatic == true
 
-	local bStatic =
+	local bIsStatic =
 		b.isStatic == true
 
-	if aStatic and bStatic then
+	if aIsStatic and bIsStatic then
 		return
 	end
 
-	if aStatic then
-	b.a += normal * overlap
-	b.b += normal * overlap
+	local massA =
+		math.max(
+			a.mass or 1,
+			0.000001
+		)
 
-	local velAlongNormal =
-		b.vel:Dot(normal)
+	local massB =
+		math.max(
+			b.mass or 1,
+			0.000001
+		)
 
-	if velAlongNormal < 0 then
-		local e =
-			getCombinedRestitution(
-				a,
-				b
-			)
+	local inverseMassA =
+		aIsStatic
+		and 0
+		or 1 / massA
 
-		b.vel -=
-			(1 + e)
-			* velAlongNormal
-			* normal
+	local inverseMassB =
+		bIsStatic
+		and 0
+		or 1 / massB
+
+	local totalInverseMass =
+		inverseMassA
+		+ inverseMassB
+
+	if totalInverseMass <= 0 then
+		return
 	end
 
-	return
-end
+	------------------------------------------------
+	-- POSITION CORRECTION
+	------------------------------------------------
 
-if bStatic then
-	a.a -= normal * overlap
-	a.b -= normal * overlap
-
-	local velAlongNormal =
-		a.vel:Dot(normal)
-
-	if velAlongNormal > 0 then
-		local e =
-			getCombinedRestitution(
-				a,
-				b
+	if not aIsStatic then
+		local correction =
+			normal
+			* overlap
+			* (
+				inverseMassA
+				/ totalInverseMass
 			)
 
-		a.vel -=
-			(1 + e)
-			* velAlongNormal
-			* normal
+		a.a -= correction
+		a.b -= correction
 	end
 
-	return
-end
+	if not bIsStatic then
+		local correction =
+			normal
+			* overlap
+			* (
+				inverseMassB
+				/ totalInverseMass
+			)
 
-	local totalMass =
-		a.mass + b.mass
+		b.a += correction
+		b.b += correction
+	end
 
-	a.a -=
-		normal
-		* overlap
-		* (b.mass / totalMass)
+	------------------------------------------------
+	-- CONTACT POINTS
+	------------------------------------------------
 
-	a.b -=
-		normal
-		* overlap
-		* (b.mass / totalMass)
+	local contactPoint =
+		(pA + pB) * 0.5
 
-	b.a +=
-		normal
-		* overlap
-		* (a.mass / totalMass)
+	local centerA =
+		(a.a + a.b) * 0.5
 
-	b.b +=
-		normal
-		* overlap
-		* (a.mass / totalMass)
+	local centerB =
+		(b.a + b.b) * 0.5
 
-	local relativeVel =
-	b.vel - a.vel
+	local rA =
+		contactPoint - centerA
 
-local velAlongNormal =
-	relativeVel:Dot(normal)
+	local rB =
+		contactPoint - centerB
 
-if velAlongNormal < 0 then
+	------------------------------------------------
+	-- RELATIVE CONTACT VELOCITY
+	------------------------------------------------
+
+	local velocityA =
+		getContactVelocity(
+			a,
+			rA
+		)
+
+	local velocityB =
+		getContactVelocity(
+			b,
+			rB
+		)
+
+	local relativeVelocity =
+		velocityB - velocityA
+
+	local velAlongNormal =
+		relativeVelocity:Dot(normal)
+
+	if velAlongNormal >= 0 then
+		return
+	end
+
 	local e =
 		getCombinedRestitution(
 			a,
 			b
 		)
 
+	------------------------------------------------
+	-- ROTATIONAL TERMS
+	------------------------------------------------
+
+	local inverseInertiaA =
+		getInverseInertia(a)
+
+	local inverseInertiaB =
+		getInverseInertia(b)
+
+	local rotationalA =
+		crossScalar(
+			rA,
+			normal
+		)
+
+	local rotationalB =
+		crossScalar(
+			rB,
+			normal
+		)
+
+	local denominator =
+		totalInverseMass
+		+ rotationalA
+			* rotationalA
+			* inverseInertiaA
+		+ rotationalB
+			* rotationalB
+			* inverseInertiaB
+
+	if denominator <= 0 then
+		return
+	end
+
+	------------------------------------------------
+	-- IMPULSE
+	------------------------------------------------
+
 	local impulseMagnitude =
 		-(1 + e)
 		* velAlongNormal
-		/ (
-			1 / a.mass
-			+ 1 / b.mass
-		)
+		/ denominator
 
 	local impulse =
 		normal * impulseMagnitude
 
-	a.vel -=
-		impulse / a.mass
+	------------------------------------------------
+	-- LINEAR VELOCITY
+	------------------------------------------------
 
-	b.vel +=
-		impulse / b.mass
-end
+	if not aIsStatic then
+		a.vel =
+			(a.vel or Vector2.zero)
+			- impulse * inverseMassA
+	end
+
+	if not bIsStatic then
+		b.vel =
+			(b.vel or Vector2.zero)
+			+ impulse * inverseMassB
+	end
+
+	------------------------------------------------
+	-- ANGULAR VELOCITY
+	------------------------------------------------
+
+	applyAngularImpulse(
+		a,
+		rA,
+		-impulse
+	)
+
+	applyAngularImpulse(
+		b,
+		rB,
+		impulse
+	)
 end
 
 ----------------------------------------------------
