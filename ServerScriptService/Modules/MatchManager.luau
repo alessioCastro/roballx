@@ -202,6 +202,7 @@ local function resetMapObject(
 
 			if mapObject.a
 				and mapObject.b
+				and not matchesCurvedSegment
 			then
 				local rotation =
 					mapObject.rotation or 0
