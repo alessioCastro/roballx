@@ -101,6 +101,48 @@ end
 -- DECOMPOSIÇÃO DE SEGMENTOS CURVADOS
 ----------------------------------------------------
 
+local function rotateSegmentPoints(
+	a: Vector2,
+	b: Vector2,
+	rotation: number
+): (Vector2, Vector2)
+
+	if rotation == 0 then
+		return a, b
+	end
+
+	local center =
+		(a + b) * 0.5
+
+	local radians =
+		math.rad(rotation)
+
+	local cos =
+		math.cos(radians)
+
+	local sin =
+		math.sin(radians)
+
+	local function rotatePoint(
+		point: Vector2
+	): Vector2
+		local relative =
+			point - center
+
+		return center
+			+ Vector2.new(
+				relative.X * cos
+					- relative.Y * sin,
+				relative.X * sin
+					+ relative.Y * cos
+			)
+	end
+
+	return
+		rotatePoint(a),
+		rotatePoint(b)
+end
+
 local function processSegments(
 	rawSegments: {any}
 ): {PhysicsEngine.Segment}
@@ -123,13 +165,21 @@ local function processSegments(
 		end
 
 		local curve = seg.curve or 0
+		local rotation = seg.rotation or 0
 
 		if curve == 0 then
+		local rotatedA, rotatedB =
+			rotateSegmentPoints(
+				seg.a,
+				seg.b,
+				rotation
+			)
+
 			processed[#processed + 1] = {
 			id = seg.id or ("seg_" .. idx),
 
-			a = seg.a,
-			b = seg.b,
+			a = rotatedA,
+			b = rotatedB,
 
 			vel = Vector2.zero,
 
