@@ -65,6 +65,9 @@ export type DiscSnapshot = {
 
 	velX: number,
 	velY: number,
+
+	rotation: number,
+	angularVelocity: number,
 }
 
 export type SegmentSnapshot = {
@@ -78,6 +81,9 @@ export type SegmentSnapshot = {
 
 	velX: number,
 	velY: number,
+
+	rotation: number,
+	angularVelocity: number,
 }
 
 export type ShapeSnapshot = {
@@ -88,6 +94,9 @@ export type ShapeSnapshot = {
 
 	velX: number,
 	velY: number,
+
+	rotation: number,
+	angularVelocity: number,
 }
 
 export type WorldSnapshot = {
@@ -255,6 +264,9 @@ function GameState.snapshot(
 
 				velX = vel.X,
 				velY = vel.Y,
+
+				rotation = d.rotation or 0,
+				angularVelocity = d.angularVelocity or 0,
 			}
 		end
 	end
@@ -280,6 +292,9 @@ function GameState.snapshot(
 
 				velX = vel.X,
 				velY = vel.Y,
+
+				rotation = seg.rotation or 0,
+				angularVelocity = seg.angularVelocity or 0,
 			}
 		end
 	end
@@ -302,6 +317,9 @@ function GameState.snapshot(
 
 				velX = vel.X,
 				velY = vel.Y,
+
+				rotation = s.rotation or 0,
+				angularVelocity = s.angularVelocity or 0,
 			}
 		end
 	end
@@ -405,6 +423,12 @@ function GameState.restore(
 					dSnap.velX,
 					dSnap.velY
 				)
+
+				d.rotation =
+					dSnap.rotation
+
+				d.angularVelocity =
+					dSnap.angularVelocity
 			end
 		end
 	end
@@ -436,6 +460,12 @@ function GameState.restore(
 					sSnap.velX,
 					sSnap.velY
 				)
+
+				seg.rotation =
+					sSnap.rotation
+
+				seg.angularVelocity =
+					sSnap.angularVelocity
 			end
 		end
 	end
@@ -462,6 +492,12 @@ function GameState.restore(
 					sSnap.velX,
 					sSnap.velY
 				)
+
+				s.rotation =
+					sSnap.rotation
+
+				s.angularVelocity =
+					sSnap.angularVelocity
 			end
 		end
 	end
@@ -598,6 +634,9 @@ function GameState.packLiveState(
 
 			vel.X,
 			vel.Y,
+
+			s.rotation or 0,
+			s.angularVelocity or 0,
 		}
 	end
 
@@ -622,6 +661,9 @@ function GameState.packLiveState(
 
 			vel.X,
 			vel.Y,
+
+			d.rotation or 0,
+			d.angularVelocity or 0,
 		}
 	end
 
@@ -649,6 +691,9 @@ function GameState.packLiveState(
 
 			vel.X,
 			vel.Y,
+
+			seg.rotation or 0,
+			seg.angularVelocity or 0,
 		}
 	end
 
@@ -742,6 +787,9 @@ function GameState.packForNetwork(
 
 			s.velX,
 			s.velY,
+
+			s.rotation or 0,
+			s.angularVelocity or 0,
 		}
 	end
 
@@ -762,6 +810,9 @@ function GameState.packForNetwork(
 
 			d.velX,
 			d.velY,
+
+			d.rotation or 0,
+			d.angularVelocity or 0,
 		}
 	end
 
@@ -785,6 +836,9 @@ function GameState.packForNetwork(
 
 			seg.velX,
 			seg.velY,
+
+			seg.rotation or 0,
+			seg.angularVelocity or 0,
 		}
 	end
 
@@ -876,6 +930,12 @@ function GameState.restorePacked(
 				sArr[4],
 				sArr[5]
 			)
+
+			shape.rotation =
+				sArr[6]
+
+			shape.angularVelocity =
+				sArr[7]
 		end
 	end
 
@@ -900,6 +960,12 @@ function GameState.restorePacked(
 				dArr[4],
 				dArr[5]
 			)
+
+			disc.rotation =
+				dArr[6]
+
+			disc.angularVelocity =
+				dArr[7]
 		end
 	end
 
@@ -929,6 +995,12 @@ function GameState.restorePacked(
 				segArr[6],
 				segArr[7]
 			)
+
+			segment.rotation =
+				segArr[8]
+
+			segment.angularVelocity =
+				segArr[9]
 		end
 	end
 end
@@ -1006,6 +1078,9 @@ function GameState.unpackFromNetwork(
 
 			velX = sArr[4],
 			velY = sArr[5],
+
+			rotation = sArr[6] or 0,
+			angularVelocity = sArr[7] or 0,
 		}
 	end
 
@@ -1022,6 +1097,9 @@ function GameState.unpackFromNetwork(
 
 			velX = dArr[4],
 			velY = dArr[5],
+
+			rotation = dArr[6] or 0,
+			angularVelocity = dArr[7] or 0,
 		}
 	end
 
@@ -1041,6 +1119,9 @@ function GameState.unpackFromNetwork(
 
 			velX = segArr[6],
 			velY = segArr[7],
+
+			rotation = segArr[8] or 0,
+			angularVelocity = segArr[9] or 0,
 		}
 	end
 
