@@ -168,12 +168,12 @@ local function processSegments(
 		local rotation = seg.rotation or 0
 
 		if curve == 0 then
-		local rotatedA, rotatedB =
-			rotateSegmentPoints(
-				seg.a,
-				seg.b,
-				rotation
-			)
+			local rotatedA, rotatedB =
+				rotateSegmentPoints(
+					seg.a,
+					seg.b,
+					rotation
+				)
 
 			processed[#processed + 1] = {
 			id = seg.id or ("seg_" .. idx),
@@ -205,8 +205,15 @@ local function processSegments(
 			cMask = buildBitmask(seg.cMask)
 		}
 		else
+			local rotatedA, rotatedB =
+				rotateSegmentPoints(
+					seg.a,
+					seg.b,
+					rotation
+				)
+
 			local samples = seg.curveSegments or 10
-			local ab = seg.b - seg.a
+			local ab = rotatedB - rotatedA
 
 			if ab.Magnitude == 0 then
 				continue
@@ -216,19 +223,19 @@ local function processSegments(
 				Vector2.new(-ab.Y, ab.X).Unit
 
 			local control =
-				(seg.a + seg.b) / 2
+				(rotatedA + rotatedB) / 2
 				+ normal * curve
 
-			local prevPoint = seg.a
+			local prevPoint = rotatedA
 
 			for i = 1, samples do
 				local t = i / samples
 				local invT = 1 - t
 
 				local currentPoint =
-					(invT * invT * seg.a)
+					(invT * invT * rotatedA)
 					+ (2 * invT * t * control)
-					+ (t * t * seg.b)
+					+ (t * t * rotatedB)
 
 				processed[#processed + 1] = {
 					id = (seg.id or ("seg_" .. idx)) .. "_" .. i,
