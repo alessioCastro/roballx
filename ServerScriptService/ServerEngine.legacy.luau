@@ -13,6 +13,7 @@ local replicatedGameRemotes =
 local serverModules = script.Parent.Modules
 
 local MapData = require(replicatedModules:WaitForChild("MapData"))
+local MapRuntime = require(replicatedModules:WaitForChild("MapRuntime"))
 local PhysicsEngine = require(replicatedModules:WaitForChild("PhysicsEngine"))
 local GameState = require(replicatedModules:WaitForChild("GameState"))
 local InputBuffer = require(replicatedModules:WaitForChild("InputBuffer"))
@@ -34,7 +35,7 @@ if not gameSnapshotEvent then
 	gameSnapshotEvent.Parent = replicatedGameRemotes
 end
 
-local currentMap = MapData.Default
+local currentMap = MapRuntime.Build(MapData.Default)
 
 ----------------------------------------------------
 -- CONVERSOR DE STRINGS DE GRUPOS EM BITMASKS
