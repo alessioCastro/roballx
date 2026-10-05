@@ -94,11 +94,52 @@ local function resetMapObject(
 			if mapObject.a
 				and mapObject.b
 			then
-				runtimeObject.a =
-					mapObject.a
+				local rotation =
+					mapObject.rotation or 0
 
-				runtimeObject.b =
-					mapObject.b
+				if rotation == 0 then
+					runtimeObject.a =
+						mapObject.a
+
+					runtimeObject.b =
+						mapObject.b
+				else
+					local center =
+						(mapObject.a + mapObject.b) * 0.5
+
+					local radians =
+						math.rad(rotation)
+
+					local cos =
+						math.cos(radians)
+
+					local sin =
+						math.sin(radians)
+
+					local relativeA =
+						mapObject.a - center
+
+					local relativeB =
+						mapObject.b - center
+
+					runtimeObject.a =
+						center
+						+ Vector2.new(
+							relativeA.X * cos
+								- relativeA.Y * sin,
+							relativeA.X * sin
+								+ relativeA.Y * cos
+						)
+
+					runtimeObject.b =
+						center
+						+ Vector2.new(
+							relativeB.X * cos
+								- relativeB.Y * sin,
+							relativeB.X * sin
+								+ relativeB.Y * cos
+						)
+				end
 			end
 
 			------------------------------------------------
