@@ -2,18 +2,22 @@
 -- MapData.luau
 -- Definição completa do mapa e das regras de gameplay.
 --
--- IMPORTANTE:
--- Disc, Shape e Segment definem apenas a geometria física do objeto.
--- Gameplay define os papéis que esses objetos assumem na partida.
+-- COORDENADAS:
+-- O sistema de coordenadas do mapa é centrado em (0, 0).
 --
--- Um mesmo objeto físico pode:
---   • ser usado como jogador;
---   • ser chutável;
---   • ser marcável;
---   • ou possuir qualquer combinação desses papéis.
+-- X:
+--   negativo = esquerda
+--   0        = centro
+--   positivo = direita
 --
--- O ID de um objeto é apenas uma referência técnica.
--- Ele não possui significado semântico como "bola", "jogador", etc.
+-- Y:
+--   negativo = cima
+--   0        = centro
+--   positivo = baixo
+--
+-- O MapData NÃO usa Vector2.
+-- Todas as coordenadas são declaradas como { x = ..., y = ... }.
+-- A conversão para Vector2 acontece na camada de runtime.
 
 local MapData = {}
 
@@ -40,9 +44,6 @@ MapData.Default = {
 
 	----------------------------------------------------
 	-- GRUPOS DE COLISÃO
-	--
-	-- Estes grupos existem somente para o sistema físico.
-	-- Eles não definem papéis de gameplay.
 	----------------------------------------------------
 
 	groups = {
@@ -54,31 +55,12 @@ MapData.Default = {
 
 	----------------------------------------------------
 	-- GAMEPLAY
-	--
-	-- Os objetos referenciados aqui vêm de:
-	--   discs
-	--   shapes
-	--   segments
-	--
-	-- O tipo geométrico do objeto não importa para o
-	-- papel de gameplay.
 	----------------------------------------------------
 
 	gameplay = {
 
 		------------------------------------------------
 		-- JOGADOR
-		--
-		-- "object" é o ID de um objeto físico usado como
-		-- modelo para os jogadores.
-		--
-		-- O objeto pode ser posteriormente:
-		--   disc
-		--   shape
-		--   segment
-		--
-		-- O PhysicsEngine será responsável por tratar
-		-- corretamente a geometria escolhida.
 		------------------------------------------------
 
 		player = {
@@ -93,17 +75,17 @@ MapData.Default = {
 
 			spawn = {
 				team1Positions = {
-					Vector2.new(200, 200),
-					Vector2.new(220, 200),
-					Vector2.new(240, 200),
-					Vector2.new(260, 200),
+					{ x = -200, y = 0 },
+					{ x = -180, y = 0 },
+					{ x = -160, y = 0 },
+					{ x = -140, y = 0 },
 				},
 
 				team2Positions = {
-					Vector2.new(600, 200),
-					Vector2.new(580, 200),
-					Vector2.new(560, 200),
-					Vector2.new(540, 200),
+					{ x = 200, y = 0 },
+					{ x = 180, y = 0 },
+					{ x = 160, y = 0 },
+					{ x = 140, y = 0 },
 				},
 			},
 
@@ -130,9 +112,6 @@ MapData.Default = {
 
 		------------------------------------------------
 		-- OBJETOS CHUTÁVEIS
-		--
-		-- Qualquer objeto físico pode aparecer aqui.
-		-- Não existe categoria "bola".
 		------------------------------------------------
 
 		kickable = {
@@ -141,12 +120,6 @@ MapData.Default = {
 
 		------------------------------------------------
 		-- PONTUAÇÃO
-		--
-		-- "object" é qualquer objeto físico que possa
-		-- satisfazer a condição de pontuação.
-		--
-		-- O mesmo objeto pode aparecer em mais de uma
-		-- regra se o mapa precisar.
 		------------------------------------------------
 
 		scoring = {
@@ -157,8 +130,8 @@ MapData.Default = {
 
 				team = "Blue",
 
-				min = Vector2.new(-40, 125),
-				max = Vector2.new(0, 275),
+				min = { x = -440, y = -75 },
+				max = { x = -400, y = 75 },
 			},
 
 			{
@@ -167,29 +140,21 @@ MapData.Default = {
 
 				team = "Red",
 
-				min = Vector2.new(800, 125),
-				max = Vector2.new(840, 275),
+				min = { x = 400, y = -75 },
+				max = { x = 440, y = 75 },
 			},
 		},
 	},
 
 	----------------------------------------------------
 	-- SHAPES
-	--
-	-- Objetos geométricos do mapa.
-	--
-	-- IMPORTANTE:
-	-- O primeiro objeto abaixo é o modelo físico dos
-	-- jogadores. Isso é apenas uma escolha deste mapa.
-	-- O motor não deverá assumir que jogadores são
-	-- necessariamente discs.
 	----------------------------------------------------
 
 	shapes = {
 
 		{
-			pos = Vector2.new(60, 200),
-			size = Vector2.new(120, 220),
+			pos = { x = -340, y = 0 },
+			size = { x = 120, y = 220 },
 
 			color = Color3.fromRGB(255, 255, 255),
 			transparency = 1,
@@ -203,8 +168,8 @@ MapData.Default = {
 		},
 
 		{
-			pos = Vector2.new(740, 200),
-			size = Vector2.new(120, 220),
+			pos = { x = 340, y = 0 },
+			size = { x = 120, y = 220 },
 
 			color = Color3.fromRGB(255, 255, 255),
 			transparency = 1,
@@ -218,8 +183,8 @@ MapData.Default = {
 		},
 
 		{
-			pos = Vector2.new(400, 200),
-			size = Vector2.new(140, 140),
+			pos = { x = 0, y = 0 },
+			size = { x = 140, y = 140 },
 
 			color = Color3.fromRGB(255, 255, 255),
 			transparency = 1,
@@ -233,8 +198,8 @@ MapData.Default = {
 		},
 
 		{
-			pos = Vector2.new(400, 200),
-			size = Vector2.new(15, 15),
+			pos = { x = 0, y = 0 },
+			size = { x = 15, y = 15 },
 
 			color = Color3.fromRGB(255, 255, 255),
 
@@ -246,8 +211,8 @@ MapData.Default = {
 		},
 
 		{
-			pos = Vector2.new(400, 300),
-			size = Vector2.new(160, 50),
+			pos = { x = 0, y = 100 },
+			size = { x = 160, y = 50 },
 
 			color = Color3.fromRGB(200, 50, 50),
 
@@ -266,8 +231,8 @@ MapData.Default = {
 		{
 			id = "obstaculo_central",
 
-			pos = Vector2.new(500, 200),
-			size = Vector2.new(120, 40),
+			pos = { x = 100, y = 0 },
+			size = { x = 120, y = 40 },
 
 			color = Color3.fromRGB(240, 180, 50),
 
@@ -295,8 +260,8 @@ MapData.Default = {
 	segments = {
 
 		{
-			a = Vector2.new(360, 0),
-			b = Vector2.new(360, 400),
+			a = { x = -40, y = -200 },
+			b = { x = -40, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -304,8 +269,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(280, 0),
-			b = Vector2.new(280, 400),
+			a = { x = -120, y = -200 },
+			b = { x = -120, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -313,8 +278,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(200, 0),
-			b = Vector2.new(200, 400),
+			a = { x = -200, y = -200 },
+			b = { x = -200, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -322,8 +287,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(120, 0),
-			b = Vector2.new(120, 400),
+			a = { x = -280, y = -200 },
+			b = { x = -280, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -331,8 +296,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(40, 0),
-			b = Vector2.new(40, 400),
+			a = { x = -360, y = -200 },
+			b = { x = -360, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -340,8 +305,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(440, 0),
-			b = Vector2.new(440, 400),
+			a = { x = 40, y = -200 },
+			b = { x = 40, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -349,8 +314,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(520, 0),
-			b = Vector2.new(520, 400),
+			a = { x = 120, y = -200 },
+			b = { x = 120, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -358,8 +323,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(600, 0),
-			b = Vector2.new(600, 400),
+			a = { x = 200, y = -200 },
+			b = { x = 200, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -367,8 +332,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(680, 0),
-			b = Vector2.new(680, 400),
+			a = { x = 280, y = -200 },
+			b = { x = 280, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -376,8 +341,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(760, 0),
-			b = Vector2.new(760, 400),
+			a = { x = 360, y = -200 },
+			b = { x = 360, y = 200 },
 			thickness = 40,
 
 			color = Color3.fromRGB(60, 121, 49),
@@ -389,8 +354,8 @@ MapData.Default = {
 		------------------------------------------------
 
 		{
-			a = Vector2.new(0, 0),
-			b = Vector2.new(800, 0),
+			a = { x = -400, y = -200 },
+			b = { x = 400, y = -200 },
 
 			thickness = 2,
 
@@ -402,8 +367,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(0, 400),
-			b = Vector2.new(800, 400),
+			a = { x = -400, y = 200 },
+			b = { x = 400, y = 200 },
 
 			thickness = 2,
 
@@ -419,8 +384,8 @@ MapData.Default = {
 		------------------------------------------------
 
 		{
-			a = Vector2.new(0, 0),
-			b = Vector2.new(0, 125),
+			a = { x = -400, y = -200 },
+			b = { x = -400, y = -75 },
 
 			thickness = 2,
 
@@ -432,8 +397,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(0, 275),
-			b = Vector2.new(0, 400),
+			a = { x = -400, y = 75 },
+			b = { x = -400, y = 200 },
 
 			thickness = 2,
 
@@ -445,8 +410,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(800, 0),
-			b = Vector2.new(800, 125),
+			a = { x = 400, y = -200 },
+			b = { x = 400, y = -75 },
 
 			thickness = 2,
 
@@ -458,8 +423,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(800, 275),
-			b = Vector2.new(800, 400),
+			a = { x = 400, y = 75 },
+			b = { x = 400, y = 200 },
 
 			thickness = 2,
 
@@ -475,8 +440,8 @@ MapData.Default = {
 		------------------------------------------------
 
 		{
-			a = Vector2.new(400, 0),
-			b = Vector2.new(400, 400),
+			a = { x = 0, y = -200 },
+			b = { x = 0, y = 200 },
 
 			thickness = 2,
 
@@ -490,8 +455,8 @@ MapData.Default = {
 		------------------------------------------------
 
 		{
-			a = Vector2.new(0, 125),
-			b = Vector2.new(-40, 125),
+			a = { x = -400, y = -75 },
+			b = { x = -440, y = -75 },
 
 			thickness = 2,
 
@@ -502,8 +467,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(0, 275),
-			b = Vector2.new(-40, 275),
+			a = { x = -400, y = 75 },
+			b = { x = -440, y = 75 },
 
 			thickness = 2,
 
@@ -514,8 +479,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(-40, 125),
-			b = Vector2.new(-40, 275),
+			a = { x = -440, y = -75 },
+			b = { x = -440, y = 75 },
 
 			curve = -7,
 			curveSegments = 10,
@@ -534,8 +499,8 @@ MapData.Default = {
 		------------------------------------------------
 
 		{
-			a = Vector2.new(800, 125),
-			b = Vector2.new(840, 125),
+			a = { x = 400, y = -75 },
+			b = { x = 440, y = -75 },
 
 			thickness = 2,
 
@@ -546,8 +511,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(800, 275),
-			b = Vector2.new(840, 275),
+			a = { x = 400, y = 75 },
+			b = { x = 440, y = 75 },
 
 			thickness = 2,
 
@@ -558,8 +523,8 @@ MapData.Default = {
 		},
 
 		{
-			a = Vector2.new(840, 125),
-			b = Vector2.new(840, 275),
+			a = { x = 440, y = -75 },
+			b = { x = 440, y = 75 },
 
 			curve = 7,
 			curveSegments = 10,
@@ -576,24 +541,18 @@ MapData.Default = {
 
 	----------------------------------------------------
 	-- DISCS
-	--
-	-- Aqui ficam somente objetos cuja geometria é
-	-- circular.
-	--
-	-- Os papéis de gameplay são definidos em gameplay,
-	-- acima, e não aqui.
 	----------------------------------------------------
 
 	discs = {
 
 		------------------------------------------------
-		-- OBJETO USADO COMO CORPO DOS JOGADORES
+		-- MODELO DOS JOGADORES
 		------------------------------------------------
 
 		{
 			id = "player_body",
 
-			pos = Vector2.new(400, 200),
+			pos = { x = 0, y = 0 },
 
 			radius = 18,
 
@@ -618,17 +577,13 @@ MapData.Default = {
 		},
 
 		------------------------------------------------
-		-- OBJETO FÍSICO USADO PELO GAMEPLAY ATUAL
-		--
-		-- Ele não é "a bola".
-		-- É simplesmente um objeto que este mapa escolheu
-		-- tornar chutável e marcável.
+		-- OBJETO FÍSICO USADO PELO GAMEPLAY
 		------------------------------------------------
 
 		{
 			id = "game_object",
 
-			pos = Vector2.new(400, 200),
+			pos = { x = 0, y = 0 },
 
 			radius = 13,
 
@@ -650,15 +605,10 @@ MapData.Default = {
 
 		------------------------------------------------
 		-- MARCADORES DE GOL
-		--
-		-- São objetos físicos normais.
-		-- Não são "goals" semanticamente para o motor.
-		-- O grupo de colisão é apenas uma configuração
-		-- física.
 		------------------------------------------------
 
 		{
-			pos = Vector2.new(0, 125),
+			pos = { x = -400, y = -75 },
 
 			radius = 5,
 
@@ -672,7 +622,21 @@ MapData.Default = {
 		},
 
 		{
-			pos = Vector2.new(0, 275),
+			pos = { x = -400, y = 75 },
+
+			radius = 5,
+
+			color = Color3.fromRGB(255, 255, 255, 255),
+
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		{
+			pos = { x = 400, y = -75 },
 
 			radius = 5,
 
@@ -686,21 +650,7 @@ MapData.Default = {
 		},
 
 		{
-			pos = Vector2.new(800, 125),
-
-			radius = 5,
-
-			color = Color3.fromRGB(255, 255, 255),
-
-			strokeWidth = 1,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-
-			cGroup = {"goal"},
-			cMask = "all",
-		},
-
-		{
-			pos = Vector2.new(800, 275),
+			pos = { x = 400, y = 75 },
 
 			radius = 5,
 
