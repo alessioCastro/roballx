@@ -18,6 +18,9 @@ local replicatedGameRemotes =
 local MapData =
 	require(replicatedModules:WaitForChild("MapData"))
 
+local MapRuntime =
+	require(replicatedModules:WaitForChild("MapRuntime"))
+
 local PhysicsEngine =
 	require(replicatedModules:WaitForChild("PhysicsEngine"))
 
@@ -64,26 +67,19 @@ end
 local player =
 	Players.LocalPlayer
 
-local playerGui =
-	player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui")
 
-local gameInputEvent =
-	replicatedGameRemotes:WaitForChild("GameInput")
+local gameInputEvent = replicatedGameRemotes:WaitForChild("GameInput")
 
-local gameSnapshotEvent =
-	replicatedGameRemotes:WaitForChild("GameSnapshot")
+local gameSnapshotEvent = replicatedGameRemotes:WaitForChild("GameSnapshot")
 
-local inputFolder =
-	replicatedModules:WaitForChild("Inputs")
+local inputFolder = replicatedModules:WaitForChild("Inputs")
 
-local currentMap =
-	MapData.Default
+local currentMap = MapRuntime.Build(MapData.Default)
 
-local playerGameplay =
-	currentMap.gameplay.player
+local playerGameplay = currentMap.gameplay.player
 
-local playerObjectId =
-	playerGameplay.object
+local playerObjectId = playerGameplay.object
 
 ----------------------------------------------------
 -- BITMASK
@@ -413,59 +409,59 @@ if currentMap.shapes then
 			local shapeObject:
 				PhysicsEngine.PhysicalShape = {
 
-				id =
+					id =
 					shape.id
 					or ("shape_" .. idx),
 
-				pos =
+					pos =
 					shape.pos,
 
-				vel =
+					vel =
 					Vector2.zero,
 
-				mass =
+					mass =
 					shape.mass or 1,
 
-				size =
+					size =
 					shape.size,
 
-				rotation =
+					rotation =
 					shape.rotation or 0,
 
-				cornerRadius =
+					cornerRadius =
 					cornerPx,
 
-				restitution =
+					restitution =
 					shape.restitution or 0.5,
 
-				isStatic =
+					isStatic =
 					(shape.isStatic ~= false),
 
-				isSolid =
+					isSolid =
 					(shape.isSolid ~= false),
 
-				damping =
+					damping =
 					shape.damping or 0.98,
 
-				cGroup =
+					cGroup =
 					buildBitmask(
 						shape.cGroup
 					),
 
-				cMask =
+					cMask =
 					buildBitmask(
 						shape.cMask
 					),
 
-				segmentP1 =
+					segmentP1 =
 					Vector2.zero,
 
-				segmentP2 =
+					segmentP2 =
 					Vector2.zero,
 
-				segmentRadius =
+					segmentRadius =
 					0
-			}
+				}
 
 			PhysicsEngine.prepareShape(
 				shapeObject
@@ -513,7 +509,7 @@ end
 if not playerTemplate then
 	error(
 		"MapData.gameplay.player.object referencia um objeto inexistente: "
-		.. tostring(playerObjectId)
+			.. tostring(playerObjectId)
 	)
 end
 
@@ -843,119 +839,119 @@ local function createPlayerFromSnapshot(
 		local playerObject:
 			PhysicsEngine.PlayerObject = {
 
-			kind = "shape",
+				kind = "shape",
 
-			id = common.id,
+				id = common.id,
 
-			pos =
+				pos =
 				Vector2.new(
 					pArr[2],
 					pArr[3]
 				),
 
-			vel =
+				vel =
 				common.vel,
 
-			mass =
+				mass =
 				common.mass,
 
-			restitution =
+				restitution =
 				common.restitution,
 
-			size =
+				size =
 				playerTemplate.size,
 
-			rotation =
+				rotation =
 				playerTemplate.rotation or 0,
 
-			cornerRadius =
+				cornerRadius =
 				cornerPx,
 
-			segmentP1 =
+				segmentP1 =
 				Vector2.zero,
 
-			segmentP2 =
+				segmentP2 =
 				Vector2.zero,
 
-			segmentRadius =
+				segmentRadius =
 				0,
 
-			isStatic =
+				isStatic =
 				common.isStatic,
 
-			isSolid =
+				isSolid =
 				common.isSolid,
 
-			team =
+				team =
 				common.team,
 
-			input =
+				input =
 				common.input,
 
-			isKicking =
+				isKicking =
 				common.isKicking,
 
-			lastKickTick =
+				lastKickTick =
 				common.lastKickTick,
 
-			cGroup =
+				cGroup =
 				common.cGroup,
 
-			cMask =
+				cMask =
 				common.cMask
-		}
+			}
 
 		local temporaryShape:
 			PhysicsEngine.PhysicalShape = {
 
-			id =
+				id =
 				playerObjectId,
 
-			pos =
+				pos =
 				playerObject.pos :: Vector2,
 
-			vel =
+				vel =
 				Vector2.zero,
 
-			mass =
+				mass =
 				common.mass,
 
-			size =
+				size =
 				playerTemplate.size,
 
-			rotation =
+				rotation =
 				playerTemplate.rotation or 0,
 
-			cornerRadius =
+				cornerRadius =
 				cornerPx,
 
-			restitution =
+				restitution =
 				common.restitution,
 
-			isStatic =
+				isStatic =
 				false,
 
-			isSolid =
+				isSolid =
 				true,
 
-			damping =
+				damping =
 				playerTemplate.damping or 0.98,
 
-			cGroup =
+				cGroup =
 				common.cGroup,
 
-			cMask =
+				cMask =
 				common.cMask,
 
-			segmentP1 =
+				segmentP1 =
 				Vector2.zero,
 
-			segmentP2 =
+				segmentP2 =
 				Vector2.zero,
 
-			segmentRadius =
+				segmentRadius =
 				0
-		}
+			}
 
 		PhysicsEngine.prepareShape(
 			temporaryShape
@@ -1140,7 +1136,7 @@ local mapDynamicRenders:
 
 for id, frame in pairs(
 	mapElements.dynamicFrames
-) do
+	) do
 	mapDynamicRenders[id] = {
 		frame = frame,
 
@@ -1257,32 +1253,32 @@ local function createPlayerRender(
 				mapElements.field,
 				{
 					id =
-						"Player_" .. tostring(pData.id),
+					"Player_" .. tostring(pData.id),
 
 					pos =
-						pData.pos :: Vector2,
+					pData.pos :: Vector2,
 
 					size =
-						pData.size :: Vector2,
+					pData.size :: Vector2,
 
 					color =
-						color,
+					color,
 
 					cornerRadius =
-						pData.cornerRadius,
+					pData.cornerRadius,
 
 					strokeWidth =
-						3,
+					3,
 
 					strokeColor =
-						Color3.fromRGB(
-							0,
-							0,
-							0
-						),
+					Color3.fromRGB(
+						0,
+						0,
+						0
+					),
 
 					rotation =
-						pData.rotation or 0
+					pData.rotation or 0
 				}
 			)
 
@@ -1385,7 +1381,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 
 		for _, pArr in ipairs(
 			packed[5]
-		) do
+			) do
 			local uId =
 				pArr[1]
 
@@ -1529,15 +1525,15 @@ RunService.Heartbeat:Connect(
 			local inputData:
 				InputBuffer.InputData = {
 
-				moveX =
+					moveX =
 					currentMoveVector.X,
 
-				moveY =
+					moveY =
 					currentMoveVector.Y,
 
-				kick =
+					kick =
 					currentIsKicking
-			}
+				}
 
 			localInputBuffer:setLocal(
 				localTick,
@@ -1590,7 +1586,7 @@ RunService.Heartbeat:Connect(
 			moveX ~= lastSentMoveX
 			or moveY ~= lastSentMoveY
 			or currentIsKicking
-				~= lastSentKickState
+			~= lastSentKickState
 		then
 
 			lastSentMoveX =
@@ -1610,6 +1606,10 @@ RunService.Heartbeat:Connect(
 		end
 	end
 )
+
+local function worldToGui(worldPosition: Vector2): Vector2
+	return UIPrimitives.WorldToGui(mapElements.field, worldPosition)
+end
 
 ----------------------------------------------------
 -- RENDERIZAÇÃO
@@ -1632,7 +1632,7 @@ RunService.RenderStepped:Connect(
 
 		for _, uId in ipairs(
 			sortedUserIds
-		) do
+			) do
 
 			local pData =
 				playersData[uId]
@@ -1717,9 +1717,9 @@ RunService.RenderStepped:Connect(
 							pData.rotation or 0
 					end
 
-				------------------------------------------------
-				-- SEGMENT
-				------------------------------------------------
+					------------------------------------------------
+					-- SEGMENT
+					------------------------------------------------
 
 				else
 					local a =
@@ -1790,7 +1790,7 @@ RunService.RenderStepped:Connect(
 				if
 					render.stroke
 					and render.lastKicking
-						~= pData.isKicking
+					~= pData.isKicking
 				then
 
 					render.stroke.Color =
@@ -1818,7 +1818,7 @@ RunService.RenderStepped:Connect(
 
 		for uId, render in pairs(
 			playerRenders
-		) do
+			) do
 			if not playersData[uId] then
 				render.frame:Destroy()
 
@@ -1833,7 +1833,7 @@ RunService.RenderStepped:Connect(
 
 		for _, render in pairs(
 			mapDynamicRenders
-		) do
+			) do
 
 			local object =
 				render.object
@@ -1868,9 +1868,9 @@ RunService.RenderStepped:Connect(
 							pos.Y
 						)
 
-				------------------------------------------------
-				-- SEGMENT
-				------------------------------------------------
+					------------------------------------------------
+					-- SEGMENT
+					------------------------------------------------
 
 				elseif object.a
 					and object.b
