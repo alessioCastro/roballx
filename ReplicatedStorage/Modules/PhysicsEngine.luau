@@ -16,6 +16,11 @@ export type CircleObject = {
 	isSolid: boolean?,
 	damping: number?,
 	resettable: boolean?,
+
+	rotation: number?,
+	rotationLocked: boolean?,
+	angularVelocity: number?,
+
 	team: string?,
 	input: Vector2?,
 	isKicking: boolean?,
@@ -38,6 +43,11 @@ export type Segment = {
 	thickness: number?,
 	ignoreCapA: boolean?,
 	ignoreCapB: boolean?,
+
+	rotation: number?,
+	rotationLocked: boolean?,
+	angularVelocity: number?,
+
 	cGroup: number?,
 	cMask: number?
 }
@@ -49,6 +59,8 @@ export type PhysicalShape = {
 	mass: number?,
 	size: Vector2,
 	rotation: number?,
+	rotationLocked: boolean?,
+	angularVelocity: number?,
 	cornerRadius: number?,
 	restitution: number?,
 	isStatic: boolean?,
@@ -448,6 +460,203 @@ local function getCombinedRestitution(
 	return
 		math.max(0, a.restitution or 0)
 		* math.max(0, b.restitution or 0)
+end
+
+----------------------------------------------------
+-- ANGULAR PHYSICS
+----------------------------------------------------
+
+local function crossScalar(
+	a: Vector2,
+	b: Vector2
+): number
+	return a.X * b.Y - a.Y * b.X
+end
+
+local function crossOmegaVector(
+	omega: number,
+	r: Vector2
+): Vector2
+	return Vector2.new(
+		-omega * r.Y,
+		omega * r.X
+	)
+end
+
+local function getCircleInertia(
+	object: CircleObject
+): number
+	local mass = math.max(object.mass, 0.000001)
+	local radius = object.radius
+
+	return 0.5 * mass * radius * radius
+end
+
+local function getShapeInertia(
+	shape: PhysicalShape
+): number
+	local mass = math.max(shape.mass or 1, 0.000001)
+	local width = shape.size.X
+	local height = shape.size.Y
+
+	return mass * (
+		width * width
+			+ height * height
+	) / 12
+end
+
+local function getSegmentInertia(
+	segment: Segment
+): number
+	local mass =
+		math.max(
+			segment.mass or 1,
+			0.000001
+		)
+
+	local length =
+		(segment.b - segment.a).Magnitude
+
+	return mass * length * length / 12
+end
+
+local function getInverseInertia(
+	object: any
+): number
+	if object.isStatic == true then
+		return 0
+	end
+
+	if object.rotationLocked == true then
+		return 0
+	end
+
+	local inertia
+
+	if object.radius ~= nil then
+		inertia =
+			getCircleInertia(
+				object
+			)
+	elseif object.size ~= nil then
+		inertia =
+			getShapeInertia(
+				object
+			)
+	elseif object.a ~= nil and object.b ~= nil then
+		inertia =
+			getSegmentInertia(
+				object
+			)
+	else
+		return 0
+	end
+
+	if inertia <= 0 then
+		return 0
+	end
+
+	return 1 / inertia
+end
+
+local function getObjectCenter(
+	object: any
+): Vector2
+	if object.pos ~= nil then
+		return object.pos
+	end
+
+	return (
+		object.a
+			+ object.b
+	) * 0.5
+end
+
+local function getAngularVelocity(
+	object: any
+): number
+	return object.angularVelocity or 0
+end
+
+local function applyAngularImpulse(
+	object: any,
+	contactVector: Vector2,
+	impulse: Vector2
+)
+	local inverseInertia =
+		getInverseInertia(object)
+
+	if inverseInertia == 0 then
+		return
+	end
+
+	object.angularVelocity =
+		getAngularVelocity(object)
+		+ crossScalar(
+			contactVector,
+			impulse
+		) * inverseInertia
+end
+
+local function getContactVelocity(
+	object: any,
+	contactVector: Vector2
+): Vector2
+	return
+		(object.vel or Vector2.zero)
+		+ crossOmegaVector(
+			getAngularVelocity(object),
+			contactVector
+		)
+end
+
+local function integrateSegmentRotation(
+	segment: Segment,
+	deltaTime: number
+)
+	if
+		segment.isStatic == true
+		or segment.rotationLocked == true
+	then
+		return
+	end
+
+	local angularVelocity =
+		segment.angularVelocity or 0
+
+	if angularVelocity == 0 then
+		return
+	end
+
+	local center =
+		(segment.a + segment.b) * 0.5
+
+	local angle =
+		angularVelocity * deltaTime
+
+	local relativeA =
+		segment.a - center
+
+	local relativeB =
+		segment.b - center
+
+	segment.a =
+		center
+		+ rotateVector(
+			relativeA,
+			angle
+		)
+
+	segment.b =
+		center
+		+ rotateVector(
+			relativeB,
+			angle
+		)
+
+	segment.rotation =
+		(segment.rotation or 0)
+		+ angle
 end
 
 ----------------------------------------------------
@@ -2226,11 +2435,20 @@ function PhysicsEngine.Step(
 				(seg.vel or Vector2.zero)
 				* (seg.damping or 0.98)
 
+			seg.angularVelocity =
+				(seg.angularVelocity or 0)
+				* (seg.damping or 0.98)
+
 			local delta =
 				seg.vel * fixedDt
 
 			seg.a += delta
 			seg.b += delta
+
+			integrateSegmentRotation(
+				seg,
+				fixedDt
+			)
 		end
 	end
 
@@ -2240,12 +2458,30 @@ function PhysicsEngine.Step(
 
 	for _, shape in ipairs(shapes) do
 		if shape.isStatic == false then
+			local damping =
+				shape.damping or 0.98
+
 			shape.vel =
 				(shape.vel or Vector2.zero)
-				* (shape.damping or 0.98)
+				* damping
+
+			shape.angularVelocity =
+				(shape.angularVelocity or 0)
+				* damping
 
 			shape.pos +=
 				shape.vel * fixedDt
+
+			if shape.rotationLocked ~= true then
+				shape.rotation =
+					(shape.rotation or 0)
+					+ (shape.angularVelocity or 0)
+					* fixedDt
+
+				PhysicsEngine.prepareShape(
+					shape
+				)
+			end
 		end
 	end
 
