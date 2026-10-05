@@ -69,17 +69,23 @@ local player =
 
 local playerGui = player:WaitForChild("PlayerGui")
 
-local gameInputEvent = replicatedGameRemotes:WaitForChild("GameInput")
+local gameInputEvent =
+	replicatedGameRemotes:WaitForChild("GameInput")
 
-local gameSnapshotEvent = replicatedGameRemotes:WaitForChild("GameSnapshot")
+local gameSnapshotEvent =
+	replicatedGameRemotes:WaitForChild("GameSnapshot")
 
-local inputFolder = replicatedModules:WaitForChild("Inputs")
+local inputFolder =
+	replicatedModules:WaitForChild("Inputs")
 
-local currentMap = MapRuntime.Build(MapData.Default)
+local currentMap =
+	MapRuntime.Build(MapData.Default)
 
-local playerGameplay = currentMap.gameplay.player
+local playerGameplay =
+	currentMap.gameplay.player
 
-local playerObjectId = playerGameplay.object
+local playerObjectId =
+	playerGameplay.object
 
 ----------------------------------------------------
 -- BITMASK
@@ -88,7 +94,8 @@ local playerObjectId = playerGameplay.object
 local DEFAULT_MASK =
 	0xFFFFFFFF
 
-local groupMap: {[string]: number} = {}
+local groupMap:
+	{[string]: number} = {}
 
 if currentMap.groups then
 	for idx, groupName in ipairs(currentMap.groups) do
@@ -138,6 +145,48 @@ end
 -- SEGMENTOS
 ----------------------------------------------------
 
+local function rotateSegmentPoints(
+	a: Vector2,
+	b: Vector2,
+	rotation: number
+): (Vector2, Vector2)
+
+	if rotation == 0 then
+		return a, b
+	end
+
+	local center =
+		(a + b) * 0.5
+
+	local radians =
+		math.rad(rotation)
+
+	local cos =
+		math.cos(radians)
+
+	local sin =
+		math.sin(radians)
+
+	local function rotatePoint(
+		point: Vector2
+	): Vector2
+		local relative =
+			point - center
+
+		return center
+			+ Vector2.new(
+				relative.X * cos
+				- relative.Y * sin,
+				relative.X * sin
+				+ relative.Y * cos
+			)
+	end
+
+	return
+		rotatePoint(a),
+		rotatePoint(b)
+end
+
 local function processSegments(
 	rawSegments: {any}
 ): {PhysicsEngine.Segment}
@@ -162,16 +211,31 @@ local function processSegments(
 		local curve =
 			seg.curve or 0
 
+		local rotation =
+			seg.rotation or 0
+
 		if curve == 0 then
+
+			local rotatedA, rotatedB =
+				rotateSegmentPoints(
+					seg.a,
+					seg.b,
+					rotation
+				)
+
 			processed[#processed + 1] = {
 				id =
 					seg.id
 					or ("seg_" .. idx),
 
-				a = seg.a,
-				b = seg.b,
+				a =
+					rotatedA,
 
-				vel = Vector2.zero,
+				b =
+					rotatedB,
+
+				vel =
+					Vector2.zero,
 
 				mass =
 					seg.mass or 1,
@@ -187,6 +251,18 @@ local function processSegments(
 
 				damping =
 					seg.damping or 0.98,
+
+				resettable =
+					(seg.resettable ~= false),
+
+				rotation =
+					seg.rotation or 0,
+
+				rotationLocked =
+					(seg.rotationLocked ~= false),
+
+				angularVelocity =
+					seg.angularVelocity or 0,
 
 				thickness =
 					seg.thickness,
@@ -207,12 +283,21 @@ local function processSegments(
 						seg.cMask
 					)
 			}
+
 		else
+
+			local rotatedA, rotatedB =
+				rotateSegmentPoints(
+					seg.a,
+					seg.b,
+					rotation
+				)
+
 			local samples =
 				seg.curveSegments or 10
 
 			local ab =
-				seg.b - seg.a
+				rotatedB - rotatedA
 
 			if ab.Magnitude == 0 then
 				continue
@@ -225,13 +310,14 @@ local function processSegments(
 				).Unit
 
 			local control =
-				(seg.a + seg.b) / 2
+				(rotatedA + rotatedB) / 2
 				+ normal * curve
 
 			local prevPoint =
-				seg.a
+				rotatedA
 
 			for i = 1, samples do
+
 				local t =
 					i / samples
 
@@ -239,15 +325,26 @@ local function processSegments(
 					1 - t
 
 				local currentPoint =
-					(invT * invT * seg.a)
+					(invT * invT * rotatedA)
 					+ (2 * invT * t * control)
-					+ (t * t * seg.b)
+					+ (t * t * rotatedB)
 
 				processed[#processed + 1] = {
+
 					id =
 						(seg.id or ("seg_" .. idx))
 						.. "_"
 						.. i,
+
+					sourceId =
+						seg.id
+						or ("seg_" .. idx),
+
+					curvePieceIndex =
+						i,
+
+					curvePieceCount =
+						samples,
 
 					a =
 						prevPoint,
@@ -272,6 +369,18 @@ local function processSegments(
 
 					damping =
 						seg.damping or 0.98,
+
+					resettable =
+						(seg.resettable ~= false),
+
+					rotation =
+						seg.rotation or 0,
+
+					rotationLocked =
+						(seg.rotationLocked ~= false),
+
+					angularVelocity =
+						seg.angularVelocity or 0,
 
 					thickness =
 						seg.thickness,
@@ -326,7 +435,9 @@ if currentMap.discs then
 		-- físico independente do mapa.
 
 		if disc.id ~= playerObjectId then
+
 			discs[#discs + 1] = {
+
 				id =
 					disc.id
 					or ("disc_" .. idx),
@@ -354,6 +465,18 @@ if currentMap.discs then
 
 				damping =
 					disc.damping or 0.98,
+
+				resettable =
+					(disc.resettable ~= false),
+
+				rotation =
+					disc.rotation or 0,
+
+				rotationLocked =
+					(disc.rotationLocked ~= false),
+
+				angularVelocity =
+					disc.angularVelocity or 0,
 
 				cGroup =
 					buildBitmask(
@@ -390,9 +513,11 @@ if currentMap.shapes then
 	for idx, shape in ipairs(currentMap.shapes) do
 
 		if shape.id ~= playerObjectId then
+
 			local cornerPx = 0
 
 			if typeof(shape.cornerRadius) == "UDim" then
+
 				cornerPx =
 					math.min(
 						shape.size.X,
@@ -402,6 +527,7 @@ if currentMap.shapes then
 					+ shape.cornerRadius.Offset
 
 			elseif typeof(shape.cornerRadius) == "number" then
+
 				cornerPx =
 					shape.cornerRadius
 			end
@@ -428,6 +554,12 @@ if currentMap.shapes then
 					rotation =
 					shape.rotation or 0,
 
+					rotationLocked =
+					(shape.rotationLocked ~= false),
+
+					angularVelocity =
+					shape.angularVelocity or 0,
+
 					cornerRadius =
 					cornerPx,
 
@@ -442,6 +574,9 @@ if currentMap.shapes then
 
 					damping =
 					shape.damping or 0.98,
+
+					resettable =
+					(shape.resettable ~= false),
 
 					cGroup =
 					buildBitmask(
@@ -477,30 +612,50 @@ end
 -- MOLDE DO PLAYER
 ----------------------------------------------------
 
-local playerTemplate: any = nil
+local playerTemplate:
+	any = nil
 
 if currentMap.discs then
+
 	for _, disc in ipairs(currentMap.discs) do
+
 		if disc.id == playerObjectId then
-			playerTemplate = disc
+
+			playerTemplate =
+				disc
+
 			break
 		end
 	end
 end
 
-if not playerTemplate and currentMap.shapes then
+if not playerTemplate
+	and currentMap.shapes
+then
+
 	for _, shape in ipairs(currentMap.shapes) do
+
 		if shape.id == playerObjectId then
-			playerTemplate = shape
+
+			playerTemplate =
+				shape
+
 			break
 		end
 	end
 end
 
-if not playerTemplate and currentMap.segments then
+if not playerTemplate
+	and currentMap.segments
+then
+
 	for _, segment in ipairs(currentMap.segments) do
+
 		if segment.id == playerObjectId then
-			playerTemplate = segment
+
+			playerTemplate =
+				segment
+
 			break
 		end
 	end
@@ -521,21 +676,27 @@ local dynamicObjects:
 	{[string]: any} = {}
 
 for _, object in ipairs(shapes) do
+
 	if object.isStatic == false then
+
 		dynamicObjects[object.id] =
 			object
 	end
 end
 
 for _, object in ipairs(discs) do
+
 	if object.isStatic == false then
+
 		dynamicObjects[object.id] =
 			object
 	end
 end
 
 for _, object in ipairs(segments) do
+
 	if object.isStatic == false then
+
 		dynamicObjects[object.id] =
 			object
 	end
@@ -549,21 +710,27 @@ local objectsById:
 	{[string]: any} = {}
 
 for _, object in ipairs(discs) do
+
 	if object.id then
+
 		objectsById[object.id] =
 			object
 	end
 end
 
 for _, object in ipairs(segments) do
+
 	if object.id then
+
 		objectsById[object.id] =
 			object
 	end
 end
 
 for _, object in ipairs(shapes) do
+
 	if object.id then
+
 		objectsById[object.id] =
 			object
 	end
@@ -580,11 +747,14 @@ local kickableIds =
 	currentMap.gameplay.kickable
 
 if kickableIds then
+
 	for _, id in ipairs(kickableIds) do
+
 		local object =
 			objectsById[id]
 
 		if object then
+
 			kickableObjects[#kickableObjects + 1] =
 				object
 		end
@@ -598,7 +768,9 @@ end
 local collisionDiscs = {}
 
 for _, d in ipairs(discs) do
+
 	if d.isSolid ~= false then
+
 		collisionDiscs[#collisionDiscs + 1] =
 			d
 	end
@@ -607,7 +779,9 @@ end
 local collisionSegments = {}
 
 for _, seg in ipairs(segments) do
+
 	if seg.isSolid ~= false then
+
 		collisionSegments[#collisionSegments + 1] =
 			seg
 	end
@@ -616,7 +790,9 @@ end
 local collisionShapes = {}
 
 for _, s in ipairs(shapes) do
+
 	if s.isSolid ~= false then
+
 		collisionShapes[#collisionShapes + 1] =
 			s
 	end
@@ -673,9 +849,11 @@ local localResetCountdown =
 ----------------------------------------------------
 
 local function rebuildSortedUserIds()
+
 	sortedUserIds = {}
 
 	for uId in pairs(playersData) do
+
 		sortedUserIds[#sortedUserIds + 1] =
 			uId
 	end
@@ -700,10 +878,15 @@ local function createPlayerFromSnapshot(
 		"disc" | "shape" | "segment"
 
 	if kindCode == 2 then
+
 		kind = "shape"
+
 	elseif kindCode == 3 then
+
 		kind = "segment"
+
 	else
+
 		kind = "disc"
 	end
 
@@ -723,7 +906,9 @@ local function createPlayerFromSnapshot(
 		)
 
 	local common = {
-		id = playerObjectId,
+
+		id =
+			playerObjectId,
 
 		vel =
 			Vector2.new(
@@ -737,10 +922,14 @@ local function createPlayerFromSnapshot(
 		restitution =
 			playerTemplate.restitution or 0.1,
 
-		isStatic = false,
-		isSolid = true,
+		isStatic =
+			false,
 
-		team = team,
+		isSolid =
+			true,
+
+		team =
+			team,
 
 		input =
 			Vector2.new(
@@ -766,10 +955,14 @@ local function createPlayerFromSnapshot(
 	------------------------------------------------
 
 	if kind == "disc" then
-		return {
-			kind = "disc",
 
-			id = common.id,
+		return {
+
+			kind =
+				"disc",
+
+			id =
+				common.id,
 
 			pos =
 				Vector2.new(
@@ -820,9 +1013,11 @@ local function createPlayerFromSnapshot(
 	------------------------------------------------
 
 	if kind == "shape" then
+
 		local cornerPx = 0
 
 		if typeof(playerTemplate.cornerRadius) == "UDim" then
+
 			cornerPx =
 				math.min(
 					playerTemplate.size.X,
@@ -832,6 +1027,7 @@ local function createPlayerFromSnapshot(
 				+ playerTemplate.cornerRadius.Offset
 
 		elseif typeof(playerTemplate.cornerRadius) == "number" then
+
 			cornerPx =
 				playerTemplate.cornerRadius
 		end
@@ -839,9 +1035,11 @@ local function createPlayerFromSnapshot(
 		local playerObject:
 			PhysicsEngine.PlayerObject = {
 
-				kind = "shape",
+				kind =
+				"shape",
 
-				id = common.id,
+				id =
+				common.id,
 
 				pos =
 				Vector2.new(
@@ -986,7 +1184,9 @@ local function createPlayerFromSnapshot(
 		)
 
 	return {
-		kind = "segment",
+
+		kind =
+			"segment",
 
 		id =
 			common.id,
@@ -994,8 +1194,11 @@ local function createPlayerFromSnapshot(
 		vel =
 			common.vel,
 
-		a = a,
-		b = b,
+		a =
+			a,
+
+		b =
+			b,
 
 		thickness =
 			playerTemplate.thickness,
@@ -1045,14 +1248,19 @@ end
 local function applyInputsForTick(
 	tick: number
 )
+
 	local myId =
 		player.UserId
 
 	for _, uId in ipairs(sortedUserIds) do
+
 		local pData =
 			playersData[uId]
 
-		if pData and uId == myId then
+		if pData
+			and uId == myId
+		then
+
 			local input =
 				localInputBuffer:getLocal(
 					tick
@@ -1137,8 +1345,11 @@ local mapDynamicRenders:
 for id, frame in pairs(
 	mapElements.dynamicFrames
 	) do
+
 	mapDynamicRenders[id] = {
-		frame = frame,
+
+		frame =
+			frame,
 
 		object =
 			dynamicObjects[id],
@@ -1163,6 +1374,7 @@ local InputModule
 if UserInputService.TouchEnabled
 	and not UserInputService.KeyboardEnabled
 then
+
 	InputModule =
 		require(
 			inputFolder.MobileInput
@@ -1171,7 +1383,9 @@ then
 	InputModule.Init(
 		mapElements.screenGui
 	)
+
 else
+
 	InputModule =
 		require(
 			inputFolder.PCInput
@@ -1206,6 +1420,7 @@ local function createPlayerRender(
 	------------------------------------------------
 
 	if pData.kind == "disc" then
+
 		local frame, stroke =
 			UIPrimitives.CreateDisc(
 				mapElements.field,
@@ -1228,15 +1443,24 @@ local function createPlayerRender(
 			)
 
 		return {
-			frame = frame,
-			stroke = stroke,
-			kind = "disc",
+
+			frame =
+				frame,
+
+			stroke =
+				stroke,
+
+			kind =
+				"disc",
 
 			renderPos =
 				pData.pos,
 
-			renderA = nil,
-			renderB = nil,
+			renderA =
+				nil,
+
+			renderB =
+				nil,
 
 			lastKicking =
 				pData.isKicking or false
@@ -1248,6 +1472,7 @@ local function createPlayerRender(
 	------------------------------------------------
 
 	if pData.kind == "shape" then
+
 		local frame, stroke =
 			UIPrimitives.CreateShape(
 				mapElements.field,
@@ -1283,15 +1508,24 @@ local function createPlayerRender(
 			)
 
 		return {
-			frame = frame,
-			stroke = stroke,
-			kind = "shape",
+
+			frame =
+				frame,
+
+			stroke =
+				stroke,
+
+			kind =
+				"shape",
 
 			renderPos =
 				pData.pos,
 
-			renderA = nil,
-			renderB = nil,
+			renderA =
+				nil,
+
+			renderB =
+				nil,
 
 			lastKicking =
 				pData.isKicking or false
@@ -1318,11 +1552,18 @@ local function createPlayerRender(
 		)
 
 	return {
-		frame = frame,
-		stroke = nil,
-		kind = "segment",
 
-		renderPos = nil,
+		frame =
+			frame,
+
+		stroke =
+			nil,
+
+		kind =
+			"segment",
+
+		renderPos =
+			nil,
 
 		renderA =
 			pData.a,
@@ -1382,6 +1623,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		for _, pArr in ipairs(
 			packed[5]
 			) do
+
 			local uId =
 				pArr[1]
 
@@ -1389,6 +1631,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 				true
 
 			if not playersData[uId] then
+
 				playersData[uId] =
 					createPlayerFromSnapshot(
 						pArr
@@ -1401,6 +1644,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		------------------------------------------------
 
 		for uId in pairs(playersData) do
+
 			if not activeIds[uId] then
 
 				playersData[uId] =
@@ -1410,6 +1654,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 					playerRenders[uId]
 
 				if render then
+
 					render.frame:Destroy()
 
 					playerRenders[uId] =
@@ -1442,6 +1687,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 				serverTick,
 				localTick - 1
 			do
+
 				applyInputsForTick(
 					replayTick
 				)
@@ -1467,7 +1713,9 @@ gameSnapshotEvent.OnClientEvent:Connect(
 					replayTick
 				)
 			end
+
 		else
+
 			localTick =
 				serverTick
 		end
@@ -1607,8 +1855,14 @@ RunService.Heartbeat:Connect(
 	end
 )
 
-local function worldToGui(worldPosition: Vector2): Vector2
-	return UIPrimitives.WorldToGui(mapElements.field, worldPosition)
+local function worldToGui(
+	worldPosition: Vector2
+): Vector2
+
+	return UIPrimitives.WorldToGui(
+		mapElements.field,
+		worldPosition
+	)
 end
 
 ----------------------------------------------------
@@ -1647,6 +1901,7 @@ RunService.RenderStepped:Connect(
 				------------------------------------------------
 
 				if not render then
+
 					render =
 						createPlayerRender(
 							pData
@@ -1660,7 +1915,10 @@ RunService.RenderStepped:Connect(
 				-- CASO O TIPO TENHA MUDADO
 				------------------------------------------------
 
-				if render.kind ~= pData.kind then
+				if render.kind
+					~= pData.kind
+				then
+
 					render.frame:Destroy()
 
 					render =
@@ -1675,11 +1933,14 @@ RunService.RenderStepped:Connect(
 				local interpAlpha
 
 				if uId == myId then
+
 					interpAlpha =
 						1 - math.exp(
 							-50 * dt
 						)
+
 				else
+
 					interpAlpha =
 						1 - math.exp(
 							-25 * dt
@@ -1718,6 +1979,7 @@ RunService.RenderStepped:Connect(
 						)
 
 					if pData.kind == "shape" then
+
 						render.frame.Rotation =
 							pData.rotation or 0
 					end
@@ -1727,6 +1989,7 @@ RunService.RenderStepped:Connect(
 					------------------------------------------------
 
 				else
+
 					local a =
 						pData.a :: Vector2
 
@@ -1829,7 +2092,9 @@ RunService.RenderStepped:Connect(
 		for uId, render in pairs(
 			playerRenders
 			) do
+
 			if not playersData[uId] then
+
 				render.frame:Destroy()
 
 				playerRenders[uId] =
@@ -1857,12 +2122,15 @@ RunService.RenderStepped:Connect(
 				if object.pos then
 
 					if render.renderPos then
+
 						render.renderPos =
 							render.renderPos:Lerp(
 								object.pos,
 								alpha
 							)
+
 					else
+
 						render.renderPos =
 							object.pos
 					end
@@ -1882,6 +2150,16 @@ RunService.RenderStepped:Connect(
 							0,
 							guiPosition.Y
 						)
+
+					------------------------------------------------
+					-- SHAPE ROTATION
+					------------------------------------------------
+
+					if object.size then
+
+						render.frame.Rotation =
+							object.rotation or 0
+					end
 
 					------------------------------------------------
 					-- SEGMENT
@@ -1912,7 +2190,9 @@ RunService.RenderStepped:Connect(
 								simB,
 								alpha
 							)
+
 					else
+
 						render.renderA =
 							simA
 
