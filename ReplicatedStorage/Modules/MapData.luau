@@ -243,6 +243,10 @@ MapData.Default = {
 
 			isSolid = true,
 			isStatic = false,
+			
+			rotation = 0,
+			rotationLocked = false,
+			angularVelocity = 0,
 
 			mass = 1,
 			damping = 0.96,
