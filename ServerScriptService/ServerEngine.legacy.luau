@@ -142,6 +142,10 @@ local function processSegments(
 			damping = seg.damping or 0.98,
 			resettable = (seg.resettable ~= false),
 
+			rotation = seg.rotation or 0,
+			rotationLocked = (seg.rotationLocked ~= false),
+			angularVelocity = seg.angularVelocity or 0,
+
 			thickness = seg.thickness,
 
 			ignoreCapA = seg.ignoreCapA,
@@ -192,6 +196,10 @@ local function processSegments(
 
 					damping = seg.damping or 0.98,
 					resettable = (seg.resettable ~= false),
+
+					rotation = seg.rotation or 0,
+					rotationLocked = (seg.rotationLocked ~= false),
+					angularVelocity = seg.angularVelocity or 0,
 
 					thickness = seg.thickness,
 
@@ -248,6 +256,10 @@ if currentMap.discs then
 				damping = disc.damping or 0.98,
 				resettable = (disc.resettable ~= false),
 
+				rotation = disc.rotation or 0,
+				rotationLocked = (disc.rotationLocked ~= false),
+				angularVelocity = disc.angularVelocity or 0,
+
 				cGroup = buildBitmask(disc.cGroup),
 				cMask = buildBitmask(disc.cMask)
 			}
@@ -300,6 +312,9 @@ if currentMap.shapes then
 				size = shape.size,
 
 				rotation = shape.rotation or 0,
+				rotationLocked = (shape.rotationLocked ~= false),
+				angularVelocity = shape.angularVelocity or 0,
+
 				cornerRadius = cornerPx,
 
 				restitution = shape.restitution or 0.5,
