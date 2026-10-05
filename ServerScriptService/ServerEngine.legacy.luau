@@ -176,34 +176,34 @@ local function processSegments(
 				)
 
 			processed[#processed + 1] = {
-			id = seg.id or ("seg_" .. idx),
+				id = seg.id or ("seg_" .. idx),
 
-			a = rotatedA,
-			b = rotatedB,
+				a = rotatedA,
+				b = rotatedB,
 
-			vel = Vector2.zero,
+				vel = Vector2.zero,
 
-			mass = seg.mass or 1,
-			restitution = seg.restitution or 0.5,
+				mass = seg.mass or 1,
+				restitution = seg.restitution or 0.5,
 
-			isStatic = (seg.isStatic ~= false),
-			isSolid = (seg.isSolid ~= false),
+				isStatic = (seg.isStatic ~= false),
+				isSolid = (seg.isSolid ~= false),
 
-			damping = seg.damping or 0.98,
-			resettable = (seg.resettable ~= false),
+				damping = seg.damping or 0.98,
+				resettable = (seg.resettable ~= false),
 
-			rotation = seg.rotation or 0,
-			rotationLocked = (seg.rotationLocked ~= false),
-			angularVelocity = seg.angularVelocity or 0,
+				rotation = seg.rotation or 0,
+				rotationLocked = (seg.rotationLocked ~= false),
+				angularVelocity = seg.angularVelocity or 0,
 
-			thickness = seg.thickness,
+				thickness = seg.thickness,
 
-			ignoreCapA = seg.ignoreCapA,
-			ignoreCapB = seg.ignoreCapB,
+				ignoreCapA = seg.ignoreCapA,
+				ignoreCapB = seg.ignoreCapB,
 
-			cGroup = buildBitmask(seg.cGroup),
-			cMask = buildBitmask(seg.cMask)
-		}
+				cGroup = buildBitmask(seg.cGroup),
+				cMask = buildBitmask(seg.cMask)
+			}
 		else
 			local rotatedA, rotatedB =
 				rotateSegmentPoints(
@@ -239,6 +239,10 @@ local function processSegments(
 
 				processed[#processed + 1] = {
 					id = (seg.id or ("seg_" .. idx)) .. "_" .. i,
+
+					sourceId = seg.id or ("seg_" .. idx),
+					curvePieceIndex = i,
+					curvePieceCount = samples,
 
 					a = prevPoint,
 					b = currentPoint,
