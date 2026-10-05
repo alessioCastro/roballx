@@ -3,6 +3,9 @@
 
 local MatchManager = {}
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PhysicsEngine = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("PhysicsEngine"))
+
 local scoreRed = 0
 local scoreBlue = 0
 local resetCountdown = 0
@@ -149,6 +152,14 @@ local function resetMapObject(
 			if mapObject.rotation ~= nil then
 				runtimeObject.rotation =
 					mapObject.rotation
+			end
+
+			------------------------------------------------
+			-- RECONSTRUIR GEOMETRIA DO SHAPE
+			------------------------------------------------
+
+			if mapObject.size then
+				PhysicsEngine.prepareShape(runtimeObject)
 			end
 
 			------------------------------------------------
