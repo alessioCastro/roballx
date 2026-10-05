@@ -75,11 +75,117 @@ local function resetMapObject(
 		return
 	end
 
-	for _, mapObject in ipairs(mapObjects) do
+	for mapIndex, mapObject in ipairs(mapObjects) do
 		local mapObjectId =
 			mapObject.id
+			or ("seg_" .. mapIndex)
 
-		if mapObjectId == runtimeObject.id then
+		local matchesCurvedSegment =
+			runtimeObject.sourceId ~= nil
+			and runtimeObject.curvePieceIndex ~= nil
+			and runtimeObject.sourceId == mapObjectId
+
+		if mapObjectId == runtimeObject.id
+			or matchesCurvedSegment
+		then
+
+			------------------------------------------------
+			-- SEGMENTO CURVADO
+			------------------------------------------------
+
+			if matchesCurvedSegment
+				and mapObject.a
+				and mapObject.b
+			then
+				local rotation =
+					mapObject.rotation or 0
+
+				local rotatedA =
+					mapObject.a
+
+				local rotatedB =
+					mapObject.b
+
+				if rotation ~= 0 then
+					local center =
+						(rotatedA + rotatedB) * 0.5
+
+					local radians =
+						math.rad(rotation)
+
+					local cos =
+						math.cos(radians)
+
+					local sin =
+						math.sin(radians)
+
+					local relativeA =
+						rotatedA - center
+
+					local relativeB =
+						rotatedB - center
+
+					rotatedA =
+						center
+						+ Vector2.new(
+							relativeA.X * cos
+								- relativeA.Y * sin,
+							relativeA.X * sin
+								+ relativeA.Y * cos
+						)
+
+					rotatedB =
+						center
+						+ Vector2.new(
+							relativeB.X * cos
+								- relativeB.Y * sin,
+							relativeB.X * sin
+								+ relativeB.Y * cos
+						)
+				end
+
+				local samples =
+					mapObject.curveSegments
+					or runtimeObject.curvePieceCount
+					or 10
+
+				local ab =
+					rotatedB - rotatedA
+
+				if ab.Magnitude ~= 0 then
+					local normal =
+						Vector2.new(-ab.Y, ab.X).Unit
+
+					local control =
+						(rotatedA + rotatedB) / 2
+						+ normal * (mapObject.curve or 0)
+
+					local pieceIndex =
+						runtimeObject.curvePieceIndex
+
+					local t1 =
+						(pieceIndex - 1) / samples
+
+					local t2 =
+						pieceIndex / samples
+
+					local invT1 =
+						1 - t1
+
+					local invT2 =
+						1 - t2
+
+					runtimeObject.a =
+						(invT1 * invT1 * rotatedA)
+						+ (2 * invT1 * t1 * control)
+						+ (t1 * t1 * rotatedB)
+
+					runtimeObject.b =
+						(invT2 * invT2 * rotatedA)
+						+ (2 * invT2 * t2 * control)
+						+ (t2 * t2 * rotatedB)
+				end
+			end
 
 			------------------------------------------------
 			-- POSIÇÃO
