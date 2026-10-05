@@ -1704,12 +1704,17 @@ RunService.RenderStepped:Connect(
 							interpAlpha
 						)
 
+					local guiPosition =
+						worldToGui(
+							render.renderPos :: Vector2
+						)
+
 					render.frame.Position =
 						UDim2.new(
 							0,
-							(render.renderPos :: Vector2).X,
+							guiPosition.X,
 							0,
-							(render.renderPos :: Vector2).Y
+							guiPosition.Y
 						)
 
 					if pData.kind == "shape" then
@@ -1763,12 +1768,17 @@ RunService.RenderStepped:Connect(
 							)
 						)
 
+					local guiPosition =
+						worldToGui(
+							midPoint
+						)
+
 					render.frame.Position =
 						UDim2.new(
 							0,
-							midPoint.X,
+							guiPosition.X,
 							0,
-							midPoint.Y
+							guiPosition.Y
 						)
 
 					render.frame.Size =
@@ -1860,12 +1870,17 @@ RunService.RenderStepped:Connect(
 					local pos =
 						render.renderPos
 
+					local guiPosition =
+						worldToGui(
+							pos
+						)
+
 					render.frame.Position =
 						UDim2.new(
 							0,
-							pos.X,
+							guiPosition.X,
 							0,
-							pos.Y
+							guiPosition.Y
 						)
 
 					------------------------------------------------
@@ -1928,12 +1943,17 @@ RunService.RenderStepped:Connect(
 							)
 						)
 
+					local guiPosition =
+						worldToGui(
+							midPoint
+						)
+
 					render.frame.Position =
 						UDim2.new(
 							0,
-							midPoint.X,
+							guiPosition.X,
 							0,
-							midPoint.Y
+							guiPosition.Y
 						)
 
 					render.frame.Size =
