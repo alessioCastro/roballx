@@ -610,55 +610,6 @@ local function getContactVelocity(
 		)
 end
 
-local function integrateSegmentRotation(
-	segment: Segment,
-	deltaTime: number
-)
-	if
-		segment.isStatic == true
-		or segment.rotationLocked == true
-	then
-		return
-	end
-
-	local angularVelocity =
-		segment.angularVelocity or 0
-
-	if angularVelocity == 0 then
-		return
-	end
-
-	local center =
-		(segment.a + segment.b) * 0.5
-
-	local angle =
-		angularVelocity * deltaTime
-
-	local relativeA =
-		segment.a - center
-
-	local relativeB =
-		segment.b - center
-
-	segment.a =
-		center
-		+ rotateVector(
-			relativeA,
-			angle
-		)
-
-	segment.b =
-		center
-		+ rotateVector(
-			relativeB,
-			angle
-		)
-
-	segment.rotation =
-		(segment.rotation or 0)
-		+ angle
-end
-
 ----------------------------------------------------
 -- COLLISION FILTER
 ----------------------------------------------------
@@ -694,6 +645,42 @@ local function rotateVector(
 		v.X * cos - v.Y * sin,
 		v.X * sin + v.Y * cos
 	)
+end
+
+local function integrateSegmentRotation(
+	segment: Segment,
+	fixedDt: number
+)
+	if segment.rotationLocked == true then
+		return
+	end
+
+	local angularVelocity =
+		segment.angularVelocity or 0
+
+	if angularVelocity == 0 then
+		return
+	end
+
+	local center =
+		(segment.a + segment.b) * 0.5
+
+	local angle =
+		angularVelocity * fixedDt
+
+	segment.a =
+		center
+		+ rotateVector(
+			segment.a - center,
+			angle
+		)
+
+	segment.b =
+		center
+		+ rotateVector(
+			segment.b - center,
+			angle
+		)
 end
 
 function PhysicsEngine.prepareShape(
