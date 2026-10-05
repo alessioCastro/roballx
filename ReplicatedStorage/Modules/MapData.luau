@@ -92,8 +92,19 @@ MapData.Default = {
 			},
 
 			spawn = {
-				Red = Vector2.new(200, 200),
-				Blue = Vector2.new(600, 200),
+				team1Positions = {
+					Vector2.new(200, 200),
+					Vector2.new(220, 200),
+					Vector2.new(240, 200),
+					Vector2.new(260, 200),
+				},
+
+				team2Positions = {
+					Vector2.new(600, 200),
+					Vector2.new(580, 200),
+					Vector2.new(560, 200),
+					Vector2.new(540, 200),
+				},
 			},
 
 			collision = {
@@ -246,7 +257,7 @@ MapData.Default = {
 			strokeColor = Color3.fromRGB(0, 0, 0),
 
 			isSolid = true,
-			restitution = 0.1,
+			restitution = 0.5,
 
 			cGroup = {"obstacle"},
 			cMask = "all",
@@ -384,7 +395,7 @@ MapData.Default = {
 			thickness = 2,
 
 			color = Color3.fromRGB(255, 255, 255),
-			restitution = 0.1,
+			restitution = 1.2,
 
 			cGroup = {"wall"},
 			cMask = "all",
@@ -397,7 +408,7 @@ MapData.Default = {
 			thickness = 2,
 
 			color = Color3.fromRGB(255, 255, 255),
-			restitution = 0.1,
+			restitution = 1.2,
 
 			cGroup = {"wall"},
 			cMask = "all",
@@ -414,7 +425,7 @@ MapData.Default = {
 			thickness = 2,
 
 			color = Color3.fromRGB(255, 255, 255),
-			restitution = 0.1,
+			restitution = 1.2,
 
 			cGroup = {"wall"},
 			cMask = "all",
@@ -427,7 +438,7 @@ MapData.Default = {
 			thickness = 2,
 
 			color = Color3.fromRGB(255, 255, 255),
-			restitution = 0.1,
+			restitution = 1.2,
 
 			cGroup = {"wall"},
 			cMask = "all",
@@ -440,7 +451,7 @@ MapData.Default = {
 			thickness = 2,
 
 			color = Color3.fromRGB(255, 255, 255),
-			restitution = 0.1,
+			restitution = 1.2,
 
 			cGroup = {"wall"},
 			cMask = "all",
@@ -453,7 +464,7 @@ MapData.Default = {
 			thickness = 2,
 
 			color = Color3.fromRGB(255, 255, 255),
-			restitution = 0.1,
+			restitution = 1.2,
 
 			cGroup = {"wall"},
 			cMask = "all",
@@ -587,8 +598,7 @@ MapData.Default = {
 			radius = 18,
 
 			mass = 5,
-			damping = 0.99,
-			restitution = 0.1,
+			restitution = 0.15,
 
 			isStatic = false,
 			isSolid = true,
