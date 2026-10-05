@@ -79,7 +79,7 @@ local function resetMapObject(
 		if mapObjectId == runtimeObject.id then
 
 			------------------------------------------------
-			-- DISC / SHAPE
+			-- POSIÇÃO
 			------------------------------------------------
 
 			if mapObject.pos then
@@ -88,7 +88,7 @@ local function resetMapObject(
 			end
 
 			------------------------------------------------
-			-- SEGMENT
+			-- SEGMENTO
 			------------------------------------------------
 
 			if mapObject.a
@@ -101,8 +101,30 @@ local function resetMapObject(
 					mapObject.b
 			end
 
+			------------------------------------------------
+			-- ROTAÇÃO
+			------------------------------------------------
+
+			if mapObject.rotation ~= nil then
+				runtimeObject.rotation =
+					mapObject.rotation
+			end
+
+			------------------------------------------------
+			-- VELOCIDADE LINEAR
+			------------------------------------------------
+
 			runtimeObject.vel =
 				Vector2.zero
+
+			------------------------------------------------
+			-- VELOCIDADE ANGULAR
+			------------------------------------------------
+
+			if runtimeObject.angularVelocity ~= nil then
+				runtimeObject.angularVelocity =
+					mapObject.angularVelocity or 0
+			end
 
 			break
 		end
