@@ -417,72 +417,110 @@ local sortedUserIds:
 	{number} = {}
 
 ----------------------------------------------------
--- DISCS
+-- OBJETOS
 ----------------------------------------------------
 
-local discs:
-	{PhysicsEngine.CircleObject} = {}
+local objects:
+	{PhysicsEngine.Object} = {}
 
-if currentMap.discs then
-	for idx, disc in ipairs(currentMap.discs) do
+if currentMap.objects then
+	for idx, objectData in ipairs(currentMap.objects) do
 
 		-- O playerObject é um molde, não um objeto
 		-- físico independente do mapa.
 
-		if disc.id ~= playerObjectId then
+		if objectData.id ~= playerObjectId then
 
-			discs[#discs + 1] = {
+			local cornerPx = 0
+
+			if typeof(objectData.cornerRadius) == "UDim" then
+
+				cornerPx =
+					math.min(
+						objectData.size.X,
+						objectData.size.Y
+					)
+					* objectData.cornerRadius.Scale
+					+ objectData.cornerRadius.Offset
+
+			elseif typeof(objectData.cornerRadius) == "number" then
+
+				cornerPx =
+					objectData.cornerRadius
+			end
+
+			local object:
+				PhysicsEngine.Object = {
 
 				id =
-					disc.id
-					or ("disc_" .. idx),
+					objectData.id
+					or ("object_" .. idx),
 
 				pos =
-					disc.pos,
+					objectData.pos,
 
 				vel =
 					Vector2.zero,
 
-				radius =
-					disc.radius,
+				size =
+					objectData.size,
 
 				mass =
-					disc.mass or 1,
+					objectData.mass or 1,
 
 				restitution =
-					disc.restitution or 0.5,
+					objectData.restitution or 0.5,
 
 				isStatic =
-					(disc.isStatic ~= false),
+					(objectData.isStatic ~= false),
 
 				isSolid =
-					(disc.isSolid ~= false),
+					(objectData.isSolid ~= false),
 
 				damping =
-					disc.damping or 0.98,
+					objectData.damping or 0.98,
 
 				resettable =
-					(disc.resettable ~= false),
+					(objectData.resettable ~= false),
 
 				rotation =
-					disc.rotation or 0,
+					objectData.rotation or 0,
 
 				rotationLocked =
-					(disc.rotationLocked ~= false),
+					(objectData.rotationLocked ~= false),
 
 				angularVelocity =
-					disc.angularVelocity or 0,
+					objectData.angularVelocity or 0,
+
+				cornerRadius =
+					cornerPx,
 
 				cGroup =
 					buildBitmask(
-						disc.cGroup
+						objectData.cGroup
 					),
 
 				cMask =
 					buildBitmask(
-						disc.cMask
-					)
+						objectData.cMask
+					),
+
+				segmentP1 =
+					Vector2.zero,
+
+				segmentP2 =
+					Vector2.zero,
+
+				segmentRadius =
+					0
 			}
+
+			PhysicsEngine.prepareObject(
+				object
+			)
+
+			objects[#objects + 1] =
+				object
 		end
 	end
 end
@@ -498,126 +536,20 @@ local segments:
 	)
 
 ----------------------------------------------------
--- SHAPES
-----------------------------------------------------
-
-local shapes:
-	{PhysicsEngine.PhysicalShape} = {}
-
-if currentMap.shapes then
-	for idx, shape in ipairs(currentMap.shapes) do
-
-		if shape.id ~= playerObjectId then
-
-			local cornerPx = 0
-
-			if typeof(shape.cornerRadius) == "UDim" then
-
-				cornerPx =
-					math.min(
-						shape.size.X,
-						shape.size.Y
-					)
-					* shape.cornerRadius.Scale
-					+ shape.cornerRadius.Offset
-
-			elseif typeof(shape.cornerRadius) == "number" then
-
-				cornerPx =
-					shape.cornerRadius
-			end
-
-			local shapeObject:
-				PhysicsEngine.PhysicalShape = {
-
-					id =
-					shape.id
-					or ("shape_" .. idx),
-
-					pos =
-					shape.pos,
-
-					vel =
-					Vector2.zero,
-
-					mass =
-					shape.mass or 1,
-
-					size =
-					shape.size,
-
-					rotation =
-					shape.rotation or 0,
-
-					rotationLocked =
-					(shape.rotationLocked ~= false),
-
-					angularVelocity =
-					shape.angularVelocity or 0,
-
-					cornerRadius =
-					cornerPx,
-
-					restitution =
-					shape.restitution or 0.5,
-
-					isStatic =
-					(shape.isStatic ~= false),
-
-					isSolid =
-					(shape.isSolid ~= false),
-
-					damping =
-					shape.damping or 0.98,
-
-					resettable =
-					(shape.resettable ~= false),
-
-					cGroup =
-					buildBitmask(
-						shape.cGroup
-					),
-
-					cMask =
-					buildBitmask(
-						shape.cMask
-					),
-
-					segmentP1 =
-					Vector2.zero,
-
-					segmentP2 =
-					Vector2.zero,
-
-					segmentRadius =
-					0
-				}
-
-			PhysicsEngine.prepareShape(
-				shapeObject
-			)
-
-			shapes[#shapes + 1] =
-				shapeObject
-		end
-	end
-end
-
-----------------------------------------------------
 -- MOLDE DO PLAYER
 ----------------------------------------------------
 
 local playerTemplate:
 	any = nil
 
-if currentMap.discs then
+if currentMap.objects then
 
-	for _, disc in ipairs(currentMap.discs) do
+	for _, object in ipairs(currentMap.objects) do
 
-		if disc.id == playerObjectId then
+		if object.id == playerObjectId then
 
 			playerTemplate =
-				disc
+				object
 
 			break
 		end
@@ -625,15 +557,155 @@ if currentMap.discs then
 end
 
 if not playerTemplate
-	and currentMap.shapes
+	and currentMap.segments
 then
 
-	for _, shape in ipairs(currentMap.shapes) do
+	for _, segment in ipairs(currentMap.segments) do
 
-		if shape.id == playerObjectId then
+		if segment.id == playerObjectId then
 
 			playerTemplate =
-				shape
+				segment
+
+			break
+		end
+	end
+end
+
+if not playerTemplate then
+	error(
+		"MapData.gameplay.player.object referencia um objeto inexistente: "
+			.. tostring(playerObjectId)
+	)
+end
+
+----------------------------------------------------
+-- OBJETOS DINÂMICOS
+----------------------------------------------------
+
+local dynamicObjects:
+	{[string]: any} = {}
+
+for _, object in ipairs(objects) do
+
+	if object.isStatic == false then
+
+		dynamicObjects[object.id] =
+			object
+	end
+end
+
+for _, segment in ipairs(segments) do
+
+	if segment.isStatic == false then
+
+		dynamicObjects[segment.id] =
+			segment
+	end
+end
+
+----------------------------------------------------
+-- OBJETOS POR ID
+----------------------------------------------------
+
+local objectsById:
+	{[string]: any} = {}
+
+for _, object in ipairs(objects) do
+
+	if object.id then
+
+		objectsById[object.id] =
+			object
+	end
+end
+
+for _, segment in ipairs(segments) do
+
+	if segment.id then
+
+		objectsById[segment.id] =
+			segment
+	end
+end
+
+----------------------------------------------------
+-- OBJETOS CHUTÁVEIS
+----------------------------------------------------
+
+local kickableObjects:
+	{any} = {}
+
+local kickableIds =
+	currentMap.gameplay.kickable
+
+if kickableIds then
+
+	for _, id in ipairs(kickableIds) do
+
+		local object =
+			objectsById[id]
+
+		if object then
+
+			kickableObjects[#kickableObjects + 1] =
+				object
+		end
+	end
+end
+
+----------------------------------------------------
+-- OBJETOS DE COLISÃO
+----------------------------------------------------
+
+local collisionObjects:
+	{PhysicsEngine.Object} = {}
+
+for _, object in ipairs(objects) do
+
+	if object.isSolid ~= false then
+
+		collisionObjects[#collisionObjects + 1] =
+			object
+	end
+end
+
+local collisionSegments:
+	{PhysicsEngine.Segment} = {}
+
+for _, segment in ipairs(segments) do
+
+	if segment.isSolid ~= false then
+
+		collisionSegments[#collisionSegments + 1] =
+			segment
+	end
+end
+
+----------------------------------------------------
+-- BROADPHASE
+----------------------------------------------------
+
+local broadphase =
+	PhysicsEngine.createBroadphase(
+		collisionObjects,
+		collisionSegments,
+		64
+	)
+
+----------------------------------------------------
+-- MOLDE DO PLAYER
+----------------------------------------------------
+
+local playerTemplate:any = nil
+
+if currentMap.objects then
+
+	for _, object in ipairs(currentMap.objects) do
+
+		if object.id == playerObjectId then
+
+			playerTemplate = object
 
 			break
 		end
@@ -870,19 +942,17 @@ local function createPlayerFromSnapshot(
 		pArr[11]
 
 	local kind:
-		"disc" | "shape" | "segment"
+		"object" | "segment"
 
 	if kindCode == 2 then
 
-		kind = "shape"
-
-	elseif kindCode == 3 then
-
-		kind = "segment"
+		kind =
+			"segment"
 
 	else
 
-		kind = "disc"
+		kind =
+			"object"
 	end
 
 	local team =
@@ -900,16 +970,127 @@ local function createPlayerFromSnapshot(
 			playerGameplay.collision.mask
 		)
 
-	local common = {
+	------------------------------------------------
+	-- SEGMENT
+	------------------------------------------------
+
+	if kind == "segment" then
+
+		return {
+
+			kind =
+				"segment",
+
+			id =
+				playerObjectId,
+
+			vel =
+				Vector2.new(
+					pArr[4],
+					pArr[5]
+				),
+
+			a =
+				Vector2.new(
+					pArr[12],
+					pArr[13]
+				),
+
+			b =
+				Vector2.new(
+					pArr[14],
+					pArr[15]
+				),
+
+			thickness =
+				playerTemplate.thickness,
+
+			ignoreCapA =
+				playerTemplate.ignoreCapA,
+
+			ignoreCapB =
+				playerTemplate.ignoreCapB,
+
+			mass =
+				playerTemplate.mass or 1,
+
+			restitution =
+				playerTemplate.restitution or 0.1,
+
+			isStatic =
+				false,
+
+			isSolid =
+				true,
+
+			team =
+				team,
+
+			input =
+				Vector2.new(
+					pArr[6],
+					pArr[7]
+				),
+
+			isKicking =
+				pArr[8] == 1,
+
+			lastKickTick =
+				pArr[9],
+
+			cGroup =
+				collisionGroup,
+
+			cMask =
+				collisionMask
+		}
+	end
+
+	------------------------------------------------
+	-- OBJECT
+	------------------------------------------------
+
+	local cornerPx = 0
+
+	if typeof(playerTemplate.cornerRadius) == "UDim" then
+
+		cornerPx =
+			math.min(
+				playerTemplate.size.X,
+				playerTemplate.size.Y
+			)
+			* playerTemplate.cornerRadius.Scale
+			+ playerTemplate.cornerRadius.Offset
+
+	elseif typeof(playerTemplate.cornerRadius) == "number" then
+
+		cornerPx =
+			playerTemplate.cornerRadius
+	end
+
+	local playerObject:
+		PhysicsEngine.PlayerObject = {
+
+		kind =
+			"object",
 
 		id =
 			playerObjectId,
+
+		pos =
+			Vector2.new(
+				pArr[2],
+				pArr[3]
+			),
 
 		vel =
 			Vector2.new(
 				pArr[4],
 				pArr[5]
 			),
+
+		size =
+			playerTemplate.size,
 
 		mass =
 			playerTemplate.mass or 1,
@@ -938,302 +1119,109 @@ local function createPlayerFromSnapshot(
 		lastKickTick =
 			pArr[9],
 
+		rotation =
+			playerTemplate.rotation or 0,
+
+		rotationLocked =
+			(playerTemplate.rotationLocked ~= false),
+
+		angularVelocity =
+			0,
+
+		cornerRadius =
+			cornerPx,
+
 		cGroup =
 			collisionGroup,
 
 		cMask =
-			collisionMask
+			collisionMask,
+
+		segmentP1 =
+			Vector2.zero,
+
+		segmentP2 =
+			Vector2.zero,
+
+		segmentRadius =
+			0
 	}
 
-	------------------------------------------------
-	-- DISC
-	------------------------------------------------
-
-	if kind == "disc" then
-
-		return {
-
-			kind =
-				"disc",
-
-			id =
-				common.id,
-
-			pos =
-				Vector2.new(
-					pArr[2],
-					pArr[3]
-				),
-
-			vel =
-				common.vel,
-
-			radius =
-				playerTemplate.radius,
-
-			mass =
-				common.mass,
-
-			restitution =
-				common.restitution,
-
-			isStatic =
-				common.isStatic,
-
-			isSolid =
-				common.isSolid,
-
-			team =
-				common.team,
-
-			input =
-				common.input,
-
-			isKicking =
-				common.isKicking,
-
-			lastKickTick =
-				common.lastKickTick,
-
-			cGroup =
-				common.cGroup,
-
-			cMask =
-				common.cMask
-		}
-	end
-
-	------------------------------------------------
-	-- SHAPE
-	------------------------------------------------
-
-	if kind == "shape" then
-
-		local cornerPx = 0
-
-		if typeof(playerTemplate.cornerRadius) == "UDim" then
-
-			cornerPx =
-				math.min(
-					playerTemplate.size.X,
-					playerTemplate.size.Y
-				)
-				* playerTemplate.cornerRadius.Scale
-				+ playerTemplate.cornerRadius.Offset
-
-		elseif typeof(playerTemplate.cornerRadius) == "number" then
-
-			cornerPx =
-				playerTemplate.cornerRadius
-		end
-
-		local playerObject:
-			PhysicsEngine.PlayerObject = {
-
-				kind =
-				"shape",
-
-				id =
-				common.id,
-
-				pos =
-				Vector2.new(
-					pArr[2],
-					pArr[3]
-				),
-
-				vel =
-				common.vel,
-
-				mass =
-				common.mass,
-
-				restitution =
-				common.restitution,
-
-				size =
-				playerTemplate.size,
-
-				rotation =
-				playerTemplate.rotation or 0,
-
-				cornerRadius =
-				cornerPx,
-
-				segmentP1 =
-				Vector2.zero,
-
-				segmentP2 =
-				Vector2.zero,
-
-				segmentRadius =
-				0,
-
-				isStatic =
-				common.isStatic,
-
-				isSolid =
-				common.isSolid,
-
-				team =
-				common.team,
-
-				input =
-				common.input,
-
-				isKicking =
-				common.isKicking,
-
-				lastKickTick =
-				common.lastKickTick,
-
-				cGroup =
-				common.cGroup,
-
-				cMask =
-				common.cMask
-			}
-
-		local temporaryShape:
-			PhysicsEngine.PhysicalShape = {
-
-				id =
-				playerObjectId,
-
-				pos =
-				playerObject.pos :: Vector2,
-
-				vel =
-				Vector2.zero,
-
-				mass =
-				common.mass,
-
-				size =
-				playerTemplate.size,
-
-				rotation =
-				playerTemplate.rotation or 0,
-
-				cornerRadius =
-				cornerPx,
-
-				restitution =
-				common.restitution,
-
-				isStatic =
-				false,
-
-				isSolid =
-				true,
-
-				damping =
-				playerTemplate.damping or 0.98,
-
-				cGroup =
-				common.cGroup,
-
-				cMask =
-				common.cMask,
-
-				segmentP1 =
-				Vector2.zero,
-
-				segmentP2 =
-				Vector2.zero,
-
-				segmentRadius =
-				0
-			}
-
-		PhysicsEngine.prepareShape(
-			temporaryShape
-		)
-
-		playerObject.segmentP1 =
-			temporaryShape.segmentP1
-
-		playerObject.segmentP2 =
-			temporaryShape.segmentP2
-
-		playerObject.segmentRadius =
-			temporaryShape.segmentRadius
-
-		return playerObject
-	end
-
-	------------------------------------------------
-	-- SEGMENT
-	------------------------------------------------
-
-	local a =
-		Vector2.new(
-			pArr[12],
-			pArr[13]
-		)
-
-	local b =
-		Vector2.new(
-			pArr[14],
-			pArr[15]
-		)
-
-	return {
-
-		kind =
-			"segment",
+	local temporaryObject:
+		PhysicsEngine.Object = {
 
 		id =
-			common.id,
+			playerObjectId,
+
+		pos =
+			playerObject.pos :: Vector2,
 
 		vel =
-			common.vel,
+			Vector2.zero,
 
-		a =
-			a,
-
-		b =
-			b,
-
-		thickness =
-			playerTemplate.thickness,
-
-		ignoreCapA =
-			playerTemplate.ignoreCapA,
-
-		ignoreCapB =
-			playerTemplate.ignoreCapB,
+		size =
+			playerTemplate.size,
 
 		mass =
-			common.mass,
+			playerObject.mass,
 
 		restitution =
-			common.restitution,
+			playerObject.restitution,
 
 		isStatic =
-			common.isStatic,
+			false,
 
 		isSolid =
-			common.isSolid,
+			true,
 
-		team =
-			common.team,
+		damping =
+			playerTemplate.damping or 0.98,
 
-		input =
-			common.input,
+		resettable =
+			false,
 
-		isKicking =
-			common.isKicking,
+		rotation =
+			playerTemplate.rotation or 0,
 
-		lastKickTick =
-			common.lastKickTick,
+		rotationLocked =
+			(playerTemplate.rotationLocked ~= false),
+
+		angularVelocity =
+			0,
+
+		cornerRadius =
+			cornerPx,
 
 		cGroup =
-			common.cGroup,
+			collisionGroup,
 
 		cMask =
-			common.cMask
+			collisionMask,
+
+		segmentP1 =
+			Vector2.zero,
+
+		segmentP2 =
+			Vector2.zero,
+
+		segmentRadius =
+			0
 	}
+
+	PhysicsEngine.prepareObject(
+		temporaryObject
+	)
+
+	playerObject.segmentP1 =
+		temporaryObject.segmentP1
+
+	playerObject.segmentP2 =
+		temporaryObject.segmentP2
+
+	playerObject.segmentRadius =
+		temporaryObject.segmentRadius
+
+	return playerObject
 end
 
 ----------------------------------------------------
@@ -1312,7 +1300,7 @@ local hud =
 type PlayerRender = {
 	frame: Frame,
 	stroke: UIStroke?,
-	kind: "disc" | "shape" | "segment",
+	kind: "disc" | "segment",
 	renderPos: Vector2?,
 	renderA: Vector2?,
 	renderB: Vector2?,
@@ -1411,94 +1399,42 @@ local function createPlayerRender(
 		)
 
 	------------------------------------------------
-	-- DISC
+	-- OBJECT
 	------------------------------------------------
 
-	if pData.kind == "disc" then
-
-		local frame, stroke =
-			UIPrimitives.CreateDisc(
-				mapElements.field,
-
-				pData.pos :: Vector2,
-
-				pData.radius :: number,
-
-				color,
-
-				3,
-
-				Color3.fromRGB(
-					0,
-					0,
-					0
-				),
-
-				"Player_" .. tostring(pData.id)
-			)
-
-		return {
-
-			frame =
-				frame,
-
-			stroke =
-				stroke,
-
-			kind =
-				"disc",
-
-			renderPos =
-				pData.pos,
-
-			renderA =
-				nil,
-
-			renderB =
-				nil,
-
-			lastKicking =
-				pData.isKicking or false
-		}
-	end
-
-	------------------------------------------------
-	-- SHAPE
-	------------------------------------------------
-
-	if pData.kind == "shape" then
+	if pData.kind == "object" then
 
 		local frame, stroke =
 			UIPrimitives.CreateShape(
 				mapElements.field,
 				{
 					id =
-					"Player_" .. tostring(pData.id),
+						"Player_" .. tostring(pData.id),
 
 					pos =
-					pData.pos :: Vector2,
+						pData.pos :: Vector2,
 
 					size =
-					pData.size :: Vector2,
+						pData.size :: Vector2,
 
 					color =
-					color,
+						color,
 
 					cornerRadius =
-					pData.cornerRadius,
+						pData.cornerRadius,
 
 					strokeWidth =
-					3,
+						3,
 
 					strokeColor =
-					Color3.fromRGB(
-						0,
-						0,
-						0
-					),
+						Color3.fromRGB(
+							0,
+							0,
+							0
+						),
 
 					rotation =
-					pData.rotation or 0
+						pData.rotation or 0
 				}
 			)
 
@@ -1511,7 +1447,7 @@ local function createPlayerRender(
 				stroke,
 
 			kind =
-				"shape",
+				"object",
 
 			renderPos =
 				pData.pos,
@@ -1664,13 +1600,7 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		-- RESTORE DO SNAPSHOT
 		------------------------------------------------
 
-		GameState.restorePacked(
-			packed,
-			playersData,
-			discs,
-			segments,
-			shapes
-		)
+		GameState.restorePacked(packed, playersData, objects, segments)
 
 		------------------------------------------------
 		-- ROLLBACK
@@ -1682,46 +1612,19 @@ gameSnapshotEvent.OnClientEvent:Connect(
 				serverTick,
 				localTick - 1
 			do
-
-				applyInputsForTick(
-					replayTick
-				)
-
-				PhysicsEngine.Step(
-					playersData,
-					sortedUserIds,
-
-					discs,
-					segments,
-					shapes,
-
-					collisionDiscs,
-					collisionSegments,
-					collisionShapes,
-
-					broadphase,
-
-					currentMap.gameplay,
-					kickableObjects,
-
-					FIXED_DT,
-					replayTick
-				)
+				applyInputsForTick(replayTick)
+				PhysicsEngine.Step(playersData, sortedUserIds, objects, segments, broadphase, currentMap.gameplay, kickableObjects, FIXED_DT, replayTick)
 			end
 
 		else
-
-			localTick =
-				serverTick
+			localTick = serverTick
 		end
 
 		------------------------------------------------
 		-- LIMPAR INPUTS ANTIGOS
 		------------------------------------------------
 
-		localInputBuffer:clearBefore(
-			serverTick - 10
-		)
+		localInputBuffer:clearBefore(serverTick - 10)
 	end
 )
 
@@ -1768,62 +1671,31 @@ RunService.Heartbeat:Connect(
 			local inputData:
 				InputBuffer.InputData = {
 
-					moveX =
-					currentMoveVector.X,
+					moveX = currentMoveVector.X,
 
-					moveY =
-					currentMoveVector.Y,
+					moveY = currentMoveVector.Y,
 
-					kick =
-					currentIsKicking
+					kick = currentIsKicking
 				}
 
-			localInputBuffer:setLocal(
-				localTick,
-				inputData
-			)
+			localInputBuffer:setLocal(localTick, inputData)
 
-			applyInputsForTick(
-				localTick
-			)
+			applyInputsForTick(localTick)
 
-			PhysicsEngine.Step(
-				playersData,
-				sortedUserIds,
+			PhysicsEngine.Step(playersData, sortedUserIds, objects, segments, broadphase, currentMap.gameplay, kickableObjects, FIXED_DT, localTick)
 
-				discs,
-				segments,
-				shapes,
+			localTick += 1
 
-				collisionDiscs,
-				collisionSegments,
-				collisionShapes,
-
-				broadphase,
-
-				currentMap.gameplay,
-				kickableObjects,
-
-				FIXED_DT,
-				localTick
-			)
-
-			localTick +=
-				1
-
-			accumulator -=
-				FIXED_DT
+			accumulator -= FIXED_DT
 		end
 
 		------------------------------------------------
 		-- ENVIO DE INPUT
 		------------------------------------------------
 
-		local moveX =
-			currentMoveVector.X
+		local moveX = currentMoveVector.X
 
-		local moveY =
-			currentMoveVector.Y
+		local moveY = currentMoveVector.Y
 
 		if
 			moveX ~= lastSentMoveX
@@ -1832,20 +1704,13 @@ RunService.Heartbeat:Connect(
 			~= lastSentKickState
 		then
 
-			lastSentMoveX =
-				moveX
+			lastSentMoveX = moveX
 
-			lastSentMoveY =
-				moveY
+			lastSentMoveY = moveY
 
-			lastSentKickState =
-				currentIsKicking
+			lastSentKickState = currentIsKicking
 
-			gameInputEvent:FireServer(
-				localTick,
-				currentMoveVector,
-				currentIsKicking
-			)
+			gameInputEvent:FireServer(localTick, currentMoveVector, currentIsKicking)
 		end
 	end
 )
@@ -1946,10 +1811,7 @@ RunService.RenderStepped:Connect(
 				-- DISC / SHAPE
 				------------------------------------------------
 
-				if
-					pData.kind == "disc"
-					or pData.kind == "shape"
-				then
+				if pData.kind == "object" then
 
 					local pos =
 						pData.pos :: Vector2
@@ -1973,11 +1835,7 @@ RunService.RenderStepped:Connect(
 							guiPosition.Y
 						)
 
-					if pData.kind == "shape" then
-
-						render.frame.Rotation =
-							pData.rotation or 0
-					end
+					render.frame.Rotation = pData.rotation or 0
 
 					------------------------------------------------
 					-- SEGMENT
