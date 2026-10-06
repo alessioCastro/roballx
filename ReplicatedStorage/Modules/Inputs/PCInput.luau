@@ -1,6 +1,9 @@
 --!strict
 local ContextActionService = game:GetService("ContextActionService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PlayerSettings = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("PlayerSettings"))
+
 local PCInput = {}
 
 local currentMoveVector = Vector2.zero
@@ -54,13 +57,22 @@ local function handleKickAction(_actionName: string, userInputState: Enum.UserIn
 	return Enum.ContextActionResult.Pass
 end
 
-function PCInput.Init()
-	ContextActionService:BindAction("MoveUp", handleMoveAction, false, Enum.KeyCode.W, Enum.KeyCode.Up, Enum.KeyCode.DPadUp)
-	ContextActionService:BindAction("MoveDown", handleMoveAction, false, Enum.KeyCode.S, Enum.KeyCode.Down, Enum.KeyCode.DPadDown)
-	ContextActionService:BindAction("MoveLeft", handleMoveAction, false, Enum.KeyCode.A, Enum.KeyCode.Left, Enum.KeyCode.DPadLeft)
-	ContextActionService:BindAction("MoveRight", handleMoveAction, false, Enum.KeyCode.D, Enum.KeyCode.Right, Enum.KeyCode.DPadRight)
+function PCInput.RefreshBindings()
+	ContextActionService:UnbindAction("MoveUp")
+	ContextActionService:UnbindAction("MoveDown")
+	ContextActionService:UnbindAction("MoveLeft")
+	ContextActionService:UnbindAction("MoveRight")
+	ContextActionService:UnbindAction("Kick")
 
-	ContextActionService:BindAction("Kick", handleKickAction, false, Enum.KeyCode.Space, Enum.KeyCode.X, Enum.KeyCode.ButtonA)
+	ContextActionService:BindAction("MoveUp", handleMoveAction, false, table.unpack(PlayerSettings.controls.moveUp))
+	ContextActionService:BindAction("MoveDown", handleMoveAction, false, table.unpack(PlayerSettings.controls.moveDown))
+	ContextActionService:BindAction("MoveLeft", handleMoveAction, false, table.unpack(PlayerSettings.controls.moveLeft))
+	ContextActionService:BindAction("MoveRight", handleMoveAction, false, table.unpack(PlayerSettings.controls.moveRight))
+	ContextActionService:BindAction("Kick", handleKickAction, false, table.unpack(PlayerSettings.controls.kick))
+end
+
+function PCInput.Init()
+	PCInput.RefreshBindings()
 end
 
 function PCInput.GetInput(): (Vector2, boolean)
