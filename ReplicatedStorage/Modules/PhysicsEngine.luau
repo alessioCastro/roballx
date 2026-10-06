@@ -5,11 +5,17 @@ local SpatialHash = require(script.Parent.SpatialHash)
 
 local DEFAULT_MASK = 0xFFFFFFFF
 
-export type CircleObject = {
+export type Object = {
 	id: string?,
 	pos: Vector2,
 	vel: Vector2,
-	radius: number,
+
+	size: Vector2,
+	rotation: number?,
+	rotationLocked: boolean?,
+	angularVelocity: number?,
+	cornerRadius: number?,
+
 	mass: number,
 	restitution: number,
 	isStatic: boolean?,
@@ -17,16 +23,18 @@ export type CircleObject = {
 	damping: number?,
 	resettable: boolean?,
 
-	rotation: number?,
-	rotationLocked: boolean?,
-	angularVelocity: number?,
-
 	team: string?,
 	input: Vector2?,
 	isKicking: boolean?,
 	lastKickTick: number?,
+
 	cGroup: number?,
-	cMask: number?
+	cMask: number?,
+
+	-- Geometria derivada para a física.
+	segmentP1: Vector2?,
+	segmentP2: Vector2?,
+	segmentRadius: number?
 }
 
 export type Segment = {
@@ -52,37 +60,15 @@ export type Segment = {
 	cMask: number?
 }
 
-export type PhysicalShape = {
-	id: string?,
-	pos: Vector2,
-	vel: Vector2?,
-	mass: number?,
-	size: Vector2,
-	rotation: number?,
-	rotationLocked: boolean?,
-	angularVelocity: number?,
-	cornerRadius: number?,
-	restitution: number?,
-	isStatic: boolean?,
-	isSolid: boolean?,
-	damping: number?,
-	resettable: boolean?,
-	cGroup: number?,
-	cMask: number?,
-
-	segmentP1: Vector2,
-	segmentP2: Vector2,
-	segmentRadius: number,
-}
-
 export type PlayerObject = {
 	id: string?,
-	kind: "disc" | "shape" | "segment",
+
+	-- O jogador usa a mesma geometria de Object ou Segment.
+	kind: "object" | "segment",
 
 	pos: Vector2?,
 	vel: Vector2,
 
-	radius: number?,
 	mass: number,
 	restitution: number,
 
@@ -108,29 +94,26 @@ export type PlayerObject = {
 	input: Vector2?,
 	isKicking: boolean?,
 	lastKickTick: number?,
+
 	cGroup: number?,
 	cMask: number?
 }
 
 export type Broadphase = {
-	staticDiscGrid: SpatialHash.Grid,
+	staticObjectGrid: SpatialHash.Grid,
 	staticSegmentGrid: SpatialHash.Grid,
-	staticShapeGrid: SpatialHash.Grid,
 
-	dynamicDiscGrid: SpatialHash.Grid,
+	dynamicObjectGrid: SpatialHash.Grid,
 	dynamicSegmentGrid: SpatialHash.Grid,
-	dynamicShapeGrid: SpatialHash.Grid,
 
 	playerGrid: SpatialHash.Grid,
 
-	discIndex: {[any]: number},
+	objectIndex: {[any]: number},
 	segmentIndex: {[any]: number},
-	shapeIndex: {[any]: number},
 	playerIndex: {[any]: number},
 
-	dynamicDiscEntries: {[any]: SpatialHash.Entry},
+	dynamicObjectEntries: {[any]: SpatialHash.Entry},
 	dynamicSegmentEntries: {[any]: SpatialHash.Entry},
-	dynamicShapeEntries: {[any]: SpatialHash.Entry},
 
 	playerEntries: {[any]: SpatialHash.Entry},
 }
@@ -139,14 +122,16 @@ export type Broadphase = {
 -- GEOMETRY
 ----------------------------------------------------
 
-local function getCircleAABB(circle: CircleObject): SpatialHash.AABB
-	local radius = circle.radius
+local function getObjectAABB(object: Object): SpatialHash.AABB
+	local p1 = object.pos + (object.segmentP1 :: Vector2)
+	local p2 = object.pos + (object.segmentP2 :: Vector2)
+	local radius = object.segmentRadius :: number
 
 	return {
-		minX = circle.pos.X - radius,
-		minY = circle.pos.Y - radius,
-		maxX = circle.pos.X + radius,
-		maxY = circle.pos.Y + radius,
+		minX = math.min(p1.X, p2.X) - radius,
+		minY = math.min(p1.Y, p2.Y) - radius,
+		maxX = math.max(p1.X, p2.X) + radius,
+		maxY = math.max(p1.Y, p2.Y) + radius,
 	}
 end
 
@@ -161,33 +146,8 @@ local function getSegmentAABB(segment: Segment): SpatialHash.AABB
 	}
 end
 
-local function getShapeAABB(shape: PhysicalShape): SpatialHash.AABB
-	local p1 = shape.pos + shape.segmentP1
-	local p2 = shape.pos + shape.segmentP2
-	local radius = shape.segmentRadius
-
-	return {
-		minX = math.min(p1.X, p2.X) - radius,
-		minY = math.min(p1.Y, p2.Y) - radius,
-		maxX = math.max(p1.X, p2.X) + radius,
-		maxY = math.max(p1.Y, p2.Y) + radius,
-	}
-end
-
 local function getPlayerAABB(player: PlayerObject): SpatialHash.AABB
-	if player.kind == "disc" then
-		local pos = player.pos :: Vector2
-		local radius = player.radius :: number
-
-		return {
-			minX = pos.X - radius,
-			minY = pos.Y - radius,
-			maxX = pos.X + radius,
-			maxY = pos.Y + radius,
-		}
-	end
-
-	if player.kind == "shape" then
+	if player.kind == "object" then
 		local pos = player.pos :: Vector2
 		local p1 = pos + (player.segmentP1 :: Vector2)
 		local p2 = pos + (player.segmentP2 :: Vector2)
@@ -214,19 +174,24 @@ local function getPlayerAABB(player: PlayerObject): SpatialHash.AABB
 end
 
 local function getPlayerCenter(player: PlayerObject): Vector2
-	if player.kind == "disc" or player.kind == "shape" then
+	if player.kind == "object" then
 		return player.pos :: Vector2
 	end
 
 	return ((player.a :: Vector2) + (player.b :: Vector2)) * 0.5
 end
 
-local function getPlayerBoundingRadius(player: PlayerObject): number
-	if player.kind == "disc" then
-		return player.radius :: number
-	end
+local function getObjectBoundingRadius(object: Object): number
+	local size = object.size
 
-	if player.kind == "shape" then
+	return math.sqrt(
+		(size.X * 0.5) ^ 2
+			+ (size.Y * 0.5) ^ 2
+	)
+end
+
+local function getPlayerBoundingRadius(player: PlayerObject): number
+	if player.kind == "object" then
 		local size = player.size :: Vector2
 
 		return math.sqrt(
@@ -243,10 +208,12 @@ end
 local function getPlayerSegment(
 	player: PlayerObject
 ): (Vector2, Vector2, number)
-	if player.kind == "shape" then
+	if player.kind == "object" then
+		local pos = player.pos :: Vector2
+
 		return
-			(player.pos :: Vector2) + (player.segmentP1 :: Vector2),
-			(player.pos :: Vector2) + (player.segmentP2 :: Vector2),
+			pos + (player.segmentP1 :: Vector2),
+			pos + (player.segmentP2 :: Vector2),
 			player.segmentRadius :: number
 	end
 
@@ -261,52 +228,47 @@ end
 ----------------------------------------------------
 
 function PhysicsEngine.createBroadphase(
-	collisionDiscs: {CircleObject},
+	collisionObjects: {Object},
 	collisionSegments: {Segment},
-	collisionShapes: {PhysicalShape},
 	cellSize: number
 ): Broadphase
 
 	local broadphase: Broadphase = {
-		staticDiscGrid = SpatialHash.new(cellSize),
+		staticObjectGrid = SpatialHash.new(cellSize),
 		staticSegmentGrid = SpatialHash.new(cellSize),
-		staticShapeGrid = SpatialHash.new(cellSize),
 
-		dynamicDiscGrid = SpatialHash.new(cellSize),
+		dynamicObjectGrid = SpatialHash.new(cellSize),
 		dynamicSegmentGrid = SpatialHash.new(cellSize),
-		dynamicShapeGrid = SpatialHash.new(cellSize),
 
 		playerGrid = SpatialHash.new(cellSize),
 
-		discIndex = {},
+		objectIndex = {},
 		segmentIndex = {},
-		shapeIndex = {},
 		playerIndex = {},
 
-		dynamicDiscEntries = {},
+		dynamicObjectEntries = {},
 		dynamicSegmentEntries = {},
-		dynamicShapeEntries = {},
 
 		playerEntries = {},
 	}
 
-	for index, disc in ipairs(collisionDiscs) do
-		broadphase.discIndex[disc] = index
+	for index, object in ipairs(collisionObjects) do
+		broadphase.objectIndex[object] = index
 
 		local grid =
-			disc.isStatic
-			and broadphase.staticDiscGrid
-			or broadphase.dynamicDiscGrid
+			object.isStatic
+			and broadphase.staticObjectGrid
+			or broadphase.dynamicObjectGrid
 
 		local entry = SpatialHash.insert(
 			grid,
-			disc,
-			getCircleAABB(disc),
+			object,
+			getObjectAABB(object),
 			index
 		)
 
-		if disc.isStatic ~= true then
-			broadphase.dynamicDiscEntries[disc] = entry
+		if object.isStatic ~= true then
+			broadphase.dynamicObjectEntries[object] = entry
 		end
 	end
 
@@ -330,50 +292,37 @@ function PhysicsEngine.createBroadphase(
 		end
 	end
 
-	for index, shape in ipairs(collisionShapes) do
-		broadphase.shapeIndex[shape] = index
-
-		local grid =
-			shape.isStatic
-			and broadphase.staticShapeGrid
-			or broadphase.dynamicShapeGrid
-
-		local entry = SpatialHash.insert(
-			grid,
-			shape,
-			getShapeAABB(shape),
-			index
-		)
-
-		if shape.isStatic ~= true then
-			broadphase.dynamicShapeEntries[shape] = entry
-		end
-	end
-
 	return broadphase
 end
 
 function PhysicsEngine.rebuildBroadphase(
 	broadphase: Broadphase,
-	collisionDiscs: {CircleObject},
-	collisionSegments: {Segment},
-	collisionShapes: {PhysicalShape}
+	collisionObjects: {Object},
+	collisionSegments: {Segment}
 )
-	SpatialHash.clear(broadphase.dynamicDiscGrid)
-	SpatialHash.clear(broadphase.dynamicSegmentGrid)
-	SpatialHash.clear(broadphase.dynamicShapeGrid)
+	SpatialHash.clear(
+		broadphase.dynamicObjectGrid
+	)
 
-	table.clear(broadphase.dynamicDiscEntries)
-	table.clear(broadphase.dynamicSegmentEntries)
-	table.clear(broadphase.dynamicShapeEntries)
+	SpatialHash.clear(
+		broadphase.dynamicSegmentGrid
+	)
 
-	for index, disc in ipairs(collisionDiscs) do
-		if disc.isStatic ~= true then
-			broadphase.dynamicDiscEntries[disc] =
+	table.clear(
+		broadphase.dynamicObjectEntries
+	)
+
+	table.clear(
+		broadphase.dynamicSegmentEntries
+	)
+
+	for index, object in ipairs(collisionObjects) do
+		if object.isStatic ~= true then
+			broadphase.dynamicObjectEntries[object] =
 				SpatialHash.insert(
-					broadphase.dynamicDiscGrid,
-					disc,
-					getCircleAABB(disc),
+					broadphase.dynamicObjectGrid,
+					object,
+					getObjectAABB(object),
 					index
 				)
 		end
@@ -386,18 +335,6 @@ function PhysicsEngine.rebuildBroadphase(
 					broadphase.dynamicSegmentGrid,
 					segment,
 					getSegmentAABB(segment),
-					index
-				)
-		end
-	end
-
-	for index, shape in ipairs(collisionShapes) do
-		if shape.isStatic ~= true then
-			broadphase.dynamicShapeEntries[shape] =
-				SpatialHash.insert(
-					broadphase.dynamicShapeGrid,
-					shape,
-					getShapeAABB(shape),
 					index
 				)
 		end
@@ -422,6 +359,7 @@ function PhysicsEngine.rebuildPlayerBroadphase(
 
 			if entry then
 				entry.index = index
+
 				broadphase.playerEntries[player] =
 					SpatialHash.update(
 						broadphase.playerGrid,
@@ -474,33 +412,29 @@ local function crossScalar(
 end
 
 local function crossOmegaVector(
-    angularVelocity: number,
-    r: Vector2
+	angularVelocity: number,
+	r: Vector2
 ): Vector2
-    local omega =
-        math.rad(angularVelocity)
+	local omega =
+		math.rad(angularVelocity)
 
-    return Vector2.new(
-        -omega * r.Y,
-        omega * r.X
-    )
+	return Vector2.new(
+		-omega * r.Y,
+		omega * r.X
+	)
 end
 
-local function getCircleInertia(
-	object: CircleObject
+local function getObjectInertia(
+	object: Object
 ): number
-	local mass = math.max(object.mass, 0.000001)
-	local radius = object.radius
+	local mass =
+		math.max(
+			object.mass,
+			0.000001
+		)
 
-	return 0.5 * mass * radius * radius
-end
-
-local function getShapeInertia(
-	shape: PhysicalShape
-): number
-	local mass = math.max(shape.mass or 1, 0.000001)
-	local width = shape.size.X
-	local height = shape.size.Y
+	local width = object.size.X
+	local height = object.size.Y
 
 	return mass * (
 		width * width
@@ -536,14 +470,9 @@ local function getInverseInertia(
 
 	local inertia
 
-	if object.radius ~= nil then
+	if object.size ~= nil then
 		inertia =
-			getCircleInertia(
-				object
-			)
-	elseif object.size ~= nil then
-		inertia =
-			getShapeInertia(
+			getObjectInertia(
 				object
 			)
 	elseif object.a ~= nil and object.b ~= nil then
@@ -634,7 +563,7 @@ local function canCollide(a: any, b: any): boolean
 end
 
 ----------------------------------------------------
--- SHAPE PREPARATION
+-- OBJECT PREPARATION
 ----------------------------------------------------
 
 local function rotateVector(
@@ -691,13 +620,17 @@ local function integrateSegmentRotation(
 		)
 end
 
-function PhysicsEngine.prepareShape(
-	shape: PhysicalShape
+function PhysicsEngine.prepareObject(
+	object: Object
 )
-	local w = shape.size.X
-	local h = shape.size.Y
+	local w = object.size.X
+	local h = object.size.Y
 
-	local radius = math.min(w, h) / 2
+	-- Mantém a mesma representação geométrica usada
+	-- anteriormente pelos PhysicalShape:
+	-- um segmento central com um raio nas extremidades.
+	local radius =
+		math.min(w, h) / 2
 
 	local extentX =
 		math.max(0, (w / 2) - radius)
@@ -723,21 +656,22 @@ function PhysicsEngine.prepareShape(
 	end
 
 	local rotation =
-		shape.rotation or 0
+		object.rotation or 0
 
-	shape.segmentP1 =
+	object.segmentP1 =
 		rotateVector(
 			p1Local,
 			rotation
 		)
 
-	shape.segmentP2 =
+	object.segmentP2 =
 		rotateVector(
 			p2Local,
 			rotation
 		)
 
-	shape.segmentRadius = radius
+	object.segmentRadius =
+		radius
 end
 
 ----------------------------------------------------
@@ -765,13 +699,13 @@ local function closestPointOnSegment(
 	return a + ab * t
 end
 
-local function getShapeSegment(
-	shape: PhysicalShape
+local function getObjectSegment(
+	object: Object
 ): (Vector2, Vector2, number)
 	return
-		shape.pos + shape.segmentP1,
-		shape.pos + shape.segmentP2,
-		shape.segmentRadius
+		object.pos + (object.segmentP1 :: Vector2),
+		object.pos + (object.segmentP2 :: Vector2),
+		object.segmentRadius :: number
 end
 
 local function getClosestPointsBetweenSegments(
@@ -782,6 +716,7 @@ local function getClosestPointsBetweenSegments(
 ): (Vector2, Vector2, number)
 
 	local bestA = a1
+
 	local bestB =
 		closestPointOnSegment(
 			a1,
@@ -789,10 +724,14 @@ local function getClosestPointsBetweenSegments(
 			b2
 		)
 
-	local delta = bestB - bestA
-	local minDistSq = delta:Dot(delta)
+	local delta =
+		bestB - bestA
+
+	local minDistSq =
+		delta:Dot(delta)
 
 	local pA = a2
+
 	local pB =
 		closestPointOnSegment(
 			a2,
@@ -800,8 +739,11 @@ local function getClosestPointsBetweenSegments(
 			b2
 		)
 
-	delta = pB - pA
-	local distSq = delta:Dot(delta)
+	delta =
+		pB - pA
+
+	local distSq =
+		delta:Dot(delta)
 
 	if distSq < minDistSq then
 		minDistSq = distSq
@@ -818,8 +760,11 @@ local function getClosestPointsBetweenSegments(
 
 	pB = b1
 
-	delta = pB - pA
-	distSq = delta:Dot(delta)
+	delta =
+		pB - pA
+
+	distSq =
+		delta:Dot(delta)
 
 	if distSq < minDistSq then
 		minDistSq = distSq
@@ -836,8 +781,11 @@ local function getClosestPointsBetweenSegments(
 
 	pB = b2
 
-	delta = pB - pA
-	distSq = delta:Dot(delta)
+	delta =
+		pB - pA
+
+	distSq =
+		delta:Dot(delta)
 
 	if distSq < minDistSq then
 		minDistSq = distSq
@@ -852,58 +800,84 @@ local function getClosestPointsBetweenSegments(
 end
 
 ----------------------------------------------------
--- CIRCLE VS SHAPE
+-- OBJECT GEOMETRY
+----------------------------------------------------
+
+local function getObjectRadius(
+	object: Object
+): number
+	local size = object.size
+
+	return math.sqrt(
+		(size.X * 0.5) ^ 2
+			+ (size.Y * 0.5) ^ 2
+	)
+end
+
+local function getObjectCollisionSegment(
+	object: Object
+): (Vector2, Vector2, number)
+	return getObjectSegment(object)
+end
+
+----------------------------------------------------
+-- PLAYER GEOMETRY ADAPTER
+----------------------------------------------------
+
+local function getPlayerCollisionGeometry(
+	player: PlayerObject
+): (Vector2, Vector2, number)
+	return getPlayerSegment(player)
+end
+
+----------------------------------------------------
+-- OBJECT VS OBJECT
 ----------------------------------------------------
 
 function PhysicsEngine.resolveShapeCollision(
-	obj: CircleObject,
-	shape: PhysicalShape
+	obj: Object,
+	object: Object
 )
-	if not canCollide(obj, shape) then
+	if not canCollide(obj, object) then
 		return
 	end
 
 	if
-		shape.isSolid == false
-		or obj.isSolid == false
+		obj.isSolid == false
+		or object.isSolid == false
 	then
 		return
 	end
 
-	local shapeVel =
-		shape.vel or Vector2.zero
-
-	local shapeMass =
-		shape.mass or 1
-
-	local shapeIsStatic =
-		shape.isStatic ~= false
-
 	local objIsStatic =
 		obj.isStatic == true
 
-	if shapeIsStatic and objIsStatic then
+	local objectIsStatic =
+		object.isStatic ~= false
+
+	if objIsStatic and objectIsStatic then
 		return
 	end
 
-	local s1, s2, shapeRad =
-		getShapeSegment(shape)
+	local object1, object2, objectRadius =
+		getObjectCollisionSegment(object)
 
-	local closestOnSeg =
+	local closestOnSegment =
 		closestPointOnSegment(
 			obj.pos,
-			s1,
-			s2
+			object1,
+			object2
 		)
 
 	local delta =
-		obj.pos - closestOnSeg
+		obj.pos - closestOnSegment
 
 	local dist =
 		delta.Magnitude
 
 	local minDist =
-		obj.radius + shapeRad
+		getObjectRadius(obj)
+		+ objectRadius
 
 	if dist >= minDist then
 		return
@@ -917,23 +891,19 @@ function PhysicsEngine.resolveShapeCollision(
 	local overlap =
 		minDist - dist
 
-	------------------------------------------------
-	-- INVERSE MASS
-	------------------------------------------------
-
 	local objInverseMass =
 		objIsStatic
 		and 0
 		or 1 / obj.mass
 
-	local shapeInverseMass =
-		shapeIsStatic
+	local objectInverseMass =
+		objectIsStatic
 		and 0
-		or 1 / shapeMass
+		or 1 / object.mass
 
 	local totalInverseMass =
 		objInverseMass
-		+ shapeInverseMass
+		+ objectInverseMass
 
 	if totalInverseMass <= 0 then
 		return
@@ -951,11 +921,11 @@ function PhysicsEngine.resolveShapeCollision(
 			/ totalInverseMass
 		)
 
-	shape.pos -=
+	object.pos -=
 		normal
 		* overlap
 		* (
-			shapeInverseMass
+			objectInverseMass
 			/ totalInverseMass
 		)
 
@@ -965,13 +935,13 @@ function PhysicsEngine.resolveShapeCollision(
 
 	local contactPoint =
 		obj.pos
-		- normal * obj.radius
+		- normal * getObjectRadius(obj)
 
 	local rObj =
 		contactPoint - obj.pos
 
-	local rShape =
-		contactPoint - shape.pos
+	local rObject =
+		contactPoint - object.pos
 
 	------------------------------------------------
 	-- RELATIVE CONTACT VELOCITY
@@ -983,15 +953,15 @@ function PhysicsEngine.resolveShapeCollision(
 			rObj
 		)
 
-	local shapeContactVelocity =
+	local objectContactVelocity =
 		getContactVelocity(
-			shape,
-			rShape
+			object,
+			rObject
 		)
 
 	local relativeVelocity =
 		objContactVelocity
-		- shapeContactVelocity
+		- objectContactVelocity
 
 	local velAlongNormal =
 		relativeVelocity:Dot(normal)
@@ -1000,14 +970,10 @@ function PhysicsEngine.resolveShapeCollision(
 		return
 	end
 
-	------------------------------------------------
-	-- RESTITUTION
-	------------------------------------------------
-
 	local e =
 		getCombinedRestitution(
 			obj,
-			shape
+			object
 		)
 
 	------------------------------------------------
@@ -1017,8 +983,8 @@ function PhysicsEngine.resolveShapeCollision(
 	local objInverseInertia =
 		getInverseInertia(obj)
 
-	local shapeInverseInertia =
-		getInverseInertia(shape)
+	local objectInverseInertia =
+		getInverseInertia(object)
 
 	local rotationalObj =
 		crossScalar(
@@ -1026,9 +992,9 @@ function PhysicsEngine.resolveShapeCollision(
 			normal
 		)
 
-	local rotationalShape =
+	local rotationalObject =
 		crossScalar(
-			rShape,
+			rObject,
 			normal
 		)
 
@@ -1037,17 +1003,13 @@ function PhysicsEngine.resolveShapeCollision(
 		+ rotationalObj
 			* rotationalObj
 			* objInverseInertia
-		+ rotationalShape
-			* rotationalShape
-			* shapeInverseInertia
+		+ rotationalObject
+			* rotationalObject
+			* objectInverseInertia
 
 	if denominator <= 0 then
 		return
 	end
-
-	------------------------------------------------
-	-- IMPULSE
-	------------------------------------------------
 
 	local impulseMagnitude =
 		-(1 + e)
@@ -1066,10 +1028,9 @@ function PhysicsEngine.resolveShapeCollision(
 			impulse * objInverseMass
 	end
 
-	if not shapeIsStatic then
-		shape.vel =
-			shapeVel
-			- impulse * shapeInverseMass
+	if not objectIsStatic then
+		object.vel -=
+			impulse * objectInverseMass
 	end
 
 	------------------------------------------------
@@ -1083,46 +1044,46 @@ function PhysicsEngine.resolveShapeCollision(
 	)
 
 	applyAngularImpulse(
-		shape,
-		rShape,
+		object,
+		rObject,
 		-impulse
 	)
 end
 
 ----------------------------------------------------
--- SHAPE VS SHAPE
+-- OBJECT VS OBJECT
 ----------------------------------------------------
 
 function PhysicsEngine.resolveShapeVsShapeCollision(
-	sA: PhysicalShape,
-	sB: PhysicalShape
+	a: Object,
+	b: Object
 )
-	if not canCollide(sA, sB) then
+	if not canCollide(a, b) then
 		return
 	end
 
 	if
-		sA.isSolid == false
-		or sB.isSolid == false
+		a.isSolid == false
+		or b.isSolid == false
 	then
 		return
 	end
 
 	local aIsStatic =
-		sA.isStatic ~= false
+		a.isStatic ~= false
 
 	local bIsStatic =
-		sB.isStatic ~= false
+		b.isStatic ~= false
 
 	if aIsStatic and bIsStatic then
 		return
 	end
 
 	local a1, a2, radA =
-		getShapeSegment(sA)
+		getObjectCollisionSegment(a)
 
 	local b1, b2, radB =
-		getShapeSegment(sB)
+		getObjectCollisionSegment(b)
 
 	local pA, pB, dist =
 		getClosestPointsBetweenSegments(
@@ -1150,25 +1111,15 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 	local overlap =
 		minDist - dist
 
-	local massA =
-		sA.mass or 1
-
-	local massB =
-		sB.mass or 1
-
-	------------------------------------------------
-	-- INVERSE MASS
-	------------------------------------------------
-
 	local inverseMassA =
 		aIsStatic
 		and 0
-		or 1 / massA
+		or 1 / a.mass
 
 	local inverseMassB =
 		bIsStatic
 		and 0
-		or 1 / massB
+		or 1 / b.mass
 
 	local totalInverseMass =
 		inverseMassA
@@ -1182,7 +1133,7 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 	-- POSITION CORRECTION
 	------------------------------------------------
 
-	sA.pos -=
+	a.pos -=
 		normal
 		* overlap
 		* (
@@ -1190,7 +1141,7 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 			/ totalInverseMass
 		)
 
-	sB.pos +=
+	b.pos +=
 		normal
 		* overlap
 		* (
@@ -1206,24 +1157,20 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 		(pA + pB) * 0.5
 
 	local rA =
-		contactPoint - sA.pos
+		contactPoint - a.pos
 
 	local rB =
-		contactPoint - sB.pos
-
-	------------------------------------------------
-	-- RELATIVE CONTACT VELOCITY
-	------------------------------------------------
+		contactPoint - b.pos
 
 	local velocityA =
 		getContactVelocity(
-			sA,
+			a,
 			rA
 		)
 
 	local velocityB =
 		getContactVelocity(
-			sB,
+			b,
 			rB
 		)
 
@@ -1237,25 +1184,17 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 		return
 	end
 
-	------------------------------------------------
-	-- RESTITUTION
-	------------------------------------------------
-
 	local e =
 		getCombinedRestitution(
-			sA,
-			sB
+			a,
+			b
 		)
 
-	------------------------------------------------
-	-- ROTATIONAL TERMS
-	------------------------------------------------
-
 	local inverseInertiaA =
-		getInverseInertia(sA)
+		getInverseInertia(a)
 
 	local inverseInertiaB =
-		getInverseInertia(sB)
+		getInverseInertia(b)
 
 	local rotationalA =
 		crossScalar(
@@ -1282,10 +1221,6 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 		return
 	end
 
-	------------------------------------------------
-	-- IMPULSE
-	------------------------------------------------
-
 	local impulseMagnitude =
 		-(1 + e)
 		* velAlongNormal
@@ -1294,81 +1229,73 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 	local impulse =
 		normal * impulseMagnitude
 
-	------------------------------------------------
-	-- LINEAR VELOCITY
-	------------------------------------------------
-
 	if not aIsStatic then
-		sA.vel =
-			(sA.vel or Vector2.zero)
+		a.vel =
+			(a.vel or Vector2.zero)
 			- impulse * inverseMassA
 	end
 
 	if not bIsStatic then
-		sB.vel =
-			(sB.vel or Vector2.zero)
+		b.vel =
+			(b.vel or Vector2.zero)
 			+ impulse * inverseMassB
 	end
 
-	------------------------------------------------
-	-- ANGULAR VELOCITY
-	------------------------------------------------
-
 	applyAngularImpulse(
-		sA,
+		a,
 		rA,
 		-impulse
 	)
 
 	applyAngularImpulse(
-		sB,
+		b,
 		rB,
 		impulse
 	)
 end
 
 ----------------------------------------------------
--- SHAPE VS SEGMENT
+-- OBJECT VS SEGMENT
 ----------------------------------------------------
 
 function PhysicsEngine.resolveShapeVsSegmentCollision(
-	shape: PhysicalShape,
+	object: Object,
 	seg: Segment
 )
-	if not canCollide(shape, seg) then
+	if not canCollide(object, seg) then
 		return
 	end
 
 	if
-		shape.isSolid == false
+		object.isSolid == false
 		or seg.isSolid == false
 	then
 		return
 	end
 
-	local shape1, shape2, shapeRad =
-		getShapeSegment(shape)
+	local object1, object2, objectRad =
+		getObjectCollisionSegment(object)
 
 	local segRad =
 		(seg.thickness or 2) * 0.5
 
-	local pShape, pSeg, dist =
+	local pObject, pSeg, dist =
 		getClosestPointsBetweenSegments(
-			shape1,
-			shape2,
+			object1,
+			object2,
 			seg.a,
 			seg.b
 		)
 
 	local minDist =
-		shapeRad + segRad
+		objectRad + segRad
 
 	if dist >= minDist then
 		return
 	end
 
 	local delta =
-		pShape - pSeg
+		pObject - pSeg
 
 	local normal =
 		dist > 0.0001
@@ -1378,38 +1305,28 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 	local overlap =
 		minDist - dist
 
-	local shapeIsStatic =
-		shape.isStatic ~= false
+	local objectIsStatic =
+		object.isStatic ~= false
 
 	local segIsStatic =
 		seg.isStatic ~= false
 
-	local shapeVel =
-		shape.vel or Vector2.zero
+	local objectVel =
+		object.vel or Vector2.zero
 
 	local segVel =
 		seg.vel or Vector2.zero
 
-	local shapeMass =
-		shape.mass or 1
+	local objectMass =
+		object.mass or 1
 
 	local segMass =
 		seg.mass or 1
 
-	local e =
-		getCombinedRestitution(
-			shape,
-			seg
-		)
-
-	------------------------------------------------
-	-- INVERSE MASS
-	------------------------------------------------
-
-	local inverseMassShape =
-		shapeIsStatic
+	local inverseMassObject =
+		objectIsStatic
 		and 0
-		or 1 / shapeMass
+		or 1 / objectMass
 
 	local inverseMassSeg =
 		segIsStatic
@@ -1417,44 +1334,44 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		or 1 / segMass
 
 	local totalInverseMass =
-		inverseMassShape
+		inverseMassObject
 		+ inverseMassSeg
 
 	if totalInverseMass <= 0 then
 		return
 	end
 
+	local e =
+		getCombinedRestitution(
+			object,
+			seg
+		)
+
 	------------------------------------------------
 	-- POSITION CORRECTION
 	------------------------------------------------
 
-	local shapeCorrection =
-		normal
-		* overlap
-		* (
-			inverseMassShape
-			/ totalInverseMass
-		)
-
-	local segmentCorrection =
-		normal
-		* overlap
-		* (
-			inverseMassSeg
-			/ totalInverseMass
-		)
-
-	if not shapeIsStatic then
-		shape.pos +=
-			shapeCorrection
+	if not objectIsStatic then
+		object.pos +=
+			normal
+			* overlap
+			* (
+				inverseMassObject
+				/ totalInverseMass
+			)
 	end
 
 	if not segIsStatic then
-		seg.a -=
-			segmentCorrection
+		local correction =
+			normal
+			* overlap
+			* (
+				inverseMassSeg
+				/ totalInverseMass
+			)
 
-		seg.b -=
-			segmentCorrection
+		seg.a -= correction
+		seg.b -= correction
 	end
 
 	------------------------------------------------
@@ -1462,10 +1379,10 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 	------------------------------------------------
 
 	local contactPoint =
-		(pShape + pSeg) * 0.5
+		(pObject + pSeg) * 0.5
 
-	local rShape =
-		contactPoint - shape.pos
+	local rObject =
+		contactPoint - object.pos
 
 	local segmentCenter =
 		(seg.a + seg.b) * 0.5
@@ -1473,14 +1390,10 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 	local rSeg =
 		contactPoint - segmentCenter
 
-	------------------------------------------------
-	-- RELATIVE CONTACT VELOCITY
-	------------------------------------------------
-
-	local shapeContactVelocity =
+	local objectContactVelocity =
 		getContactVelocity(
-			shape,
-			rShape
+			object,
+			rObject
 		)
 
 	local segmentContactVelocity =
@@ -1490,7 +1403,7 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		)
 
 	local relativeVelocity =
-		shapeContactVelocity
+		objectContactVelocity
 		- segmentContactVelocity
 
 	local velAlongNormal =
@@ -1500,19 +1413,15 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		return
 	end
 
-	------------------------------------------------
-	-- ROTATIONAL TERMS
-	------------------------------------------------
-
-	local inverseInertiaShape =
-		getInverseInertia(shape)
+	local inverseInertiaObject =
+		getInverseInertia(object)
 
 	local inverseInertiaSeg =
 		getInverseInertia(seg)
 
-	local rotationalShape =
+	local rotationalObject =
 		crossScalar(
-			rShape,
+			rObject,
 			normal
 		)
 
@@ -1524,9 +1433,9 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 
 	local denominator =
 		totalInverseMass
-		+ rotationalShape
-			* rotationalShape
-			* inverseInertiaShape
+		+ rotationalObject
+			* rotationalObject
+			* inverseInertiaObject
 		+ rotationalSeg
 			* rotationalSeg
 			* inverseInertiaSeg
@@ -1534,10 +1443,6 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 	if denominator <= 0 then
 		return
 	end
-
-	------------------------------------------------
-	-- IMPULSE
-	------------------------------------------------
 
 	local impulseMagnitude =
 		-(1 + e)
@@ -1547,14 +1452,10 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 	local impulse =
 		normal * impulseMagnitude
 
-	------------------------------------------------
-	-- LINEAR VELOCITY
-	------------------------------------------------
-
-	if not shapeIsStatic then
-		shape.vel =
-			shapeVel
-			+ impulse * inverseMassShape
+	if not objectIsStatic then
+		object.vel =
+			objectVel
+			+ impulse * inverseMassObject
 	end
 
 	if not segIsStatic then
@@ -1563,13 +1464,9 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 			- impulse * inverseMassSeg
 	end
 
-	------------------------------------------------
-	-- ANGULAR VELOCITY
-	------------------------------------------------
-
 	applyAngularImpulse(
-		shape,
-		rShape,
+		object,
+		rObject,
 		impulse
 	)
 
@@ -1581,20 +1478,20 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 end
 
 ----------------------------------------------------
--- CIRCLE VS SEGMENT
+-- OBJECT VS SEGMENT
 ----------------------------------------------------
 
 function PhysicsEngine.resolveSegmentCollision(
-	obj: CircleObject,
+	object: Object,
 	seg: Segment
 )
-	if not canCollide(obj, seg) then
+	if not canCollide(object, seg) then
 		return
 	end
 
 	if
 		seg.isSolid == false
-		or obj.isSolid == false
+		or object.isSolid == false
 	then
 		return
 	end
@@ -1603,7 +1500,7 @@ function PhysicsEngine.resolveSegmentCollision(
 		seg.b - seg.a
 
 	local ap =
-		obj.pos - seg.a
+		object.pos - seg.a
 
 	local ab2 =
 		ab:Dot(ab)
@@ -1636,7 +1533,7 @@ function PhysicsEngine.resolveSegmentCollision(
 		seg.a + ab * t
 
 	local delta =
-		obj.pos - closest
+		object.pos - closest
 
 	local dist =
 		delta.Magnitude
@@ -1644,8 +1541,11 @@ function PhysicsEngine.resolveSegmentCollision(
 	local segRadius =
 		(seg.thickness or 0) * 0.5
 
+	local objectRadius =
+		getObjectRadius(object)
+
 	local minDist =
-		obj.radius + segRadius
+		objectRadius + segRadius
 
 	if dist >= minDist then
 		return
@@ -1673,12 +1573,12 @@ function PhysicsEngine.resolveSegmentCollision(
 	local segIsStatic =
 		seg.isStatic ~= false
 
-	local objIsStatic =
-		obj.isStatic == true
+	local objectIsStatic =
+		object.isStatic == true
 
-	local objMass =
+	local objectMass =
 		math.max(
-			obj.mass,
+			object.mass,
 			0.000001
 		)
 
@@ -1688,10 +1588,10 @@ function PhysicsEngine.resolveSegmentCollision(
 			0.000001
 		)
 
-	local inverseMassObj =
-		objIsStatic
+	local inverseMassObject =
+		objectIsStatic
 		and 0
-		or 1 / objMass
+		or 1 / objectMass
 
 	local inverseMassSeg =
 		segIsStatic
@@ -1699,7 +1599,7 @@ function PhysicsEngine.resolveSegmentCollision(
 		or 1 / segMass
 
 	local totalInverseMass =
-		inverseMassObj
+		inverseMassObject
 		+ inverseMassSeg
 
 	if totalInverseMass <= 0 then
@@ -1708,7 +1608,7 @@ function PhysicsEngine.resolveSegmentCollision(
 
 	local e =
 		getCombinedRestitution(
-			obj,
+			object,
 			seg
 		)
 
@@ -1716,12 +1616,12 @@ function PhysicsEngine.resolveSegmentCollision(
 	-- POSITION CORRECTION
 	------------------------------------------------
 
-	if not objIsStatic then
-		obj.pos +=
+	if not objectIsStatic then
+		object.pos +=
 			normal
 			* overlap
 			* (
-				inverseMassObj
+				inverseMassObject
 				/ totalInverseMass
 			)
 	end
@@ -1735,11 +1635,8 @@ function PhysicsEngine.resolveSegmentCollision(
 				/ totalInverseMass
 			)
 
-		seg.a -=
-			correction
-
-		seg.b -=
-			correction
+		seg.a -= correction
+		seg.b -= correction
 	end
 
 	------------------------------------------------
@@ -1750,8 +1647,8 @@ function PhysicsEngine.resolveSegmentCollision(
 		closest
 		+ normal * segRadius
 
-	local rObj =
-		contactPoint - obj.pos
+	local rObject =
+		contactPoint - object.pos
 
 	local segmentCenter =
 		(seg.a + seg.b) * 0.5
@@ -1759,14 +1656,10 @@ function PhysicsEngine.resolveSegmentCollision(
 	local rSeg =
 		contactPoint - segmentCenter
 
-	------------------------------------------------
-	-- RELATIVE CONTACT VELOCITY
-	------------------------------------------------
-
-	local objContactVelocity =
+	local objectContactVelocity =
 		getContactVelocity(
-			obj,
-			rObj
+			object,
+			rObject
 		)
 
 	local segContactVelocity =
@@ -1776,7 +1669,7 @@ function PhysicsEngine.resolveSegmentCollision(
 		)
 
 	local relativeVelocity =
-		objContactVelocity
+		objectContactVelocity
 		- segContactVelocity
 
 	local velAlongNormal =
@@ -1786,19 +1679,15 @@ function PhysicsEngine.resolveSegmentCollision(
 		return
 	end
 
-	------------------------------------------------
-	-- ROTATIONAL TERMS
-	------------------------------------------------
-
-	local inverseInertiaObj =
-		getInverseInertia(obj)
+	local inverseInertiaObject =
+		getInverseInertia(object)
 
 	local inverseInertiaSeg =
 		getInverseInertia(seg)
 
-	local rotationalObj =
+	local rotationalObject =
 		crossScalar(
-			rObj,
+			rObject,
 			normal
 		)
 
@@ -1810,9 +1699,9 @@ function PhysicsEngine.resolveSegmentCollision(
 
 	local denominator =
 		totalInverseMass
-		+ rotationalObj
-			* rotationalObj
-			* inverseInertiaObj
+		+ rotationalObject
+			* rotationalObject
+			* inverseInertiaObject
 		+ rotationalSeg
 			* rotationalSeg
 			* inverseInertiaSeg
@@ -1820,10 +1709,6 @@ function PhysicsEngine.resolveSegmentCollision(
 	if denominator <= 0 then
 		return
 	end
-
-	------------------------------------------------
-	-- IMPULSE
-	------------------------------------------------
 
 	local impulseMagnitude =
 		-(1 + e)
@@ -1833,14 +1718,10 @@ function PhysicsEngine.resolveSegmentCollision(
 	local impulse =
 		normal * impulseMagnitude
 
-	------------------------------------------------
-	-- LINEAR VELOCITY
-	------------------------------------------------
-
-	if not objIsStatic then
-		obj.vel =
-			(obj.vel or Vector2.zero)
-			+ impulse * inverseMassObj
+	if not objectIsStatic then
+		object.vel =
+			(object.vel or Vector2.zero)
+			+ impulse * inverseMassObject
 	end
 
 	if not segIsStatic then
@@ -1849,13 +1730,9 @@ function PhysicsEngine.resolveSegmentCollision(
 			- impulse * inverseMassSeg
 	end
 
-	------------------------------------------------
-	-- ANGULAR VELOCITY
-	------------------------------------------------
-
 	applyAngularImpulse(
-		obj,
-		rObj,
+		object,
+		rObject,
 		impulse
 	)
 
@@ -1867,12 +1744,12 @@ function PhysicsEngine.resolveSegmentCollision(
 end
 
 ----------------------------------------------------
--- CIRCLE VS CIRCLE
+-- OBJECT VS OBJECT (CIRCLE SPECIAL CASE)
 ----------------------------------------------------
 
 local function resolveCircleCollision(
-	a: CircleObject,
-	b: CircleObject
+	a: Object,
+	b: Object
 )
 	if
 		a.isStatic == true
@@ -1887,8 +1764,14 @@ local function resolveCircleCollision(
 	local dist =
 		delta.Magnitude
 
+	local radiusA =
+		getObjectRadius(a)
+
+	local radiusB =
+		getObjectRadius(b)
+
 	local minDist =
-		a.radius + b.radius
+		radiusA + radiusB
 
 	if dist >= minDist then
 		return
@@ -1944,12 +1827,18 @@ local function resolveCircleCollision(
 	a.pos -=
 		normal
 		* overlap
-		* (aInverseMass / totalInverseMass)
+		* (
+			aInverseMass
+			/ totalInverseMass
+		)
 
 	b.pos +=
 		normal
 		* overlap
-		* (bInverseMass / totalInverseMass)
+		* (
+			bInverseMass
+			/ totalInverseMass
+		)
 
 	------------------------------------------------
 	-- CONTACT POINTS
@@ -1957,17 +1846,13 @@ local function resolveCircleCollision(
 
 	local contactPoint =
 		a.pos
-		+ normal * a.radius
+		+ normal * radiusA
 
 	local rA =
 		contactPoint - a.pos
 
 	local rB =
 		contactPoint - b.pos
-
-	------------------------------------------------
-	-- RELATIVE CONTACT VELOCITY
-	------------------------------------------------
 
 	local velocityA =
 		getContactVelocity(
@@ -1990,10 +1875,6 @@ local function resolveCircleCollision(
 	if velAlongNormal >= 0 then
 		return
 	end
-
-	------------------------------------------------
-	-- IMPULSE DENOMINATOR
-	------------------------------------------------
 
 	local inverseInertiaA =
 		getInverseInertia(a)
@@ -2026,10 +1907,6 @@ local function resolveCircleCollision(
 		return
 	end
 
-	------------------------------------------------
-	-- NORMAL IMPULSE
-	------------------------------------------------
-
 	local impulseMagnitude =
 		-(1 + e)
 		* velAlongNormal
@@ -2037,10 +1914,6 @@ local function resolveCircleCollision(
 
 	local impulse =
 		normal * impulseMagnitude
-
-	------------------------------------------------
-	-- LINEAR VELOCITY
-	------------------------------------------------
 
 	if not aIsStatic then
 		a.vel -=
@@ -2051,10 +1924,6 @@ local function resolveCircleCollision(
 		b.vel +=
 			impulse * bInverseMass
 	end
-
-	------------------------------------------------
-	-- ANGULAR VELOCITY
-	------------------------------------------------
 
 	applyAngularImpulse(
 		a,
@@ -2073,20 +1942,10 @@ end
 -- PLAYER / GEOMETRY ADAPTERS
 ----------------------------------------------------
 
-local function playerAsCircle(
+local function playerAsObject(
 	player: PlayerObject
-): CircleObject?
-	if player.kind ~= "disc" then
-		return nil
-	end
-
-	return player :: any
-end
-
-local function playerAsShape(
-	player: PlayerObject
-): PhysicalShape?
-	if player.kind ~= "shape" then
+): Object?
+	if player.kind ~= "object" then
 		return nil
 	end
 
@@ -2104,59 +1963,22 @@ local function playerAsSegment(
 end
 
 ----------------------------------------------------
--- PLAYER VS DISC
+-- PLAYER VS OBJECT
 ----------------------------------------------------
 
-local function resolvePlayerVsDisc(
+local function resolvePlayerVsObject(
 	player: PlayerObject,
-	disc: CircleObject
+	object: Object
 )
-	if player.kind == "disc" then
-		PhysicsEngine.resolveCircleCollision(
-			playerAsCircle(player) :: CircleObject,
-			disc
-		)
-
-	elseif player.kind == "shape" then
-		PhysicsEngine.resolveShapeCollision(
-			disc,
-			playerAsShape(player) :: PhysicalShape
-		)
-
-	elseif player.kind == "segment" then
-		local segment =
-			playerAsSegment(player) :: Segment
-
-		PhysicsEngine.resolveSegmentCollision(
-			disc,
-			segment
-		)
-	end
-end
-
-----------------------------------------------------
--- PLAYER VS SHAPE
-----------------------------------------------------
-
-local function resolvePlayerVsShape(
-	player: PlayerObject,
-	shape: PhysicalShape
-)
-	if player.kind == "disc" then
-		PhysicsEngine.resolveShapeCollision(
-			playerAsCircle(player) :: CircleObject,
-			shape
-		)
-
-	elseif player.kind == "shape" then
+	if player.kind == "object" then
 		PhysicsEngine.resolveShapeVsShapeCollision(
-			playerAsShape(player) :: PhysicalShape,
-			shape
+			playerAsObject(player) :: Object,
+			object
 		)
 
 	elseif player.kind == "segment" then
 		PhysicsEngine.resolveShapeVsSegmentCollision(
-			shape,
+			object,
 			playerAsSegment(player) :: Segment
 		)
 	end
@@ -2170,15 +1992,9 @@ local function resolvePlayerVsSegment(
 	player: PlayerObject,
 	segment: Segment
 )
-	if player.kind == "disc" then
-		PhysicsEngine.resolveSegmentCollision(
-			playerAsCircle(player) :: CircleObject,
-			segment
-		)
-
-	elseif player.kind == "shape" then
+	if player.kind == "object" then
 		PhysicsEngine.resolveShapeVsSegmentCollision(
-			playerAsShape(player) :: PhysicalShape,
+			playerAsObject(player) :: Object,
 			segment
 		)
 
@@ -2441,28 +2257,12 @@ local function resolvePlayerVsPlayer(
 	end
 
 	------------------------------------------------
-	-- DISC × DISC
+	-- OBJECT × OBJECT
 	------------------------------------------------
 
 	if
-		a.kind == "disc"
-		and b.kind == "disc"
-	then
-		PhysicsEngine.resolveCircleCollision(
-			a :: any,
-			b :: any
-		)
-
-		return
-	end
-
-	------------------------------------------------
-	-- SHAPE × SHAPE
-	------------------------------------------------
-
-	if
-		a.kind == "shape"
-		and b.kind == "shape"
+		a.kind == "object"
+		and b.kind == "object"
 	then
 		PhysicsEngine.resolveShapeVsShapeCollision(
 			a :: any,
@@ -2473,51 +2273,11 @@ local function resolvePlayerVsPlayer(
 	end
 
 	------------------------------------------------
-	-- SHAPE × DISC
+	-- OBJECT × SEGMENT
 	------------------------------------------------
 
 	if
-		a.kind == "shape"
-		and b.kind == "disc"
-	then
-		PhysicsEngine.resolveShapeCollision(
-			b :: any,
-			a :: any
-		)
-
-		return
-	end
-
-	if
-		a.kind == "disc"
-		and b.kind == "shape"
-	then
-		PhysicsEngine.resolveShapeCollision(
-			a :: any,
-			b :: any
-		)
-
-		return
-	end
-
-	------------------------------------------------
-	-- SEGMENT × SHAPE
-	------------------------------------------------
-
-	if
-		a.kind == "segment"
-		and b.kind == "shape"
-	then
-		PhysicsEngine.resolveShapeVsSegmentCollision(
-			b :: any,
-			a :: any
-		)
-
-		return
-	end
-
-	if
-		a.kind == "shape"
+		a.kind == "object"
 		and b.kind == "segment"
 	then
 		PhysicsEngine.resolveShapeVsSegmentCollision(
@@ -2528,29 +2288,13 @@ local function resolvePlayerVsPlayer(
 		return
 	end
 
-	------------------------------------------------
-	-- SEGMENT × DISC
-	------------------------------------------------
-
 	if
 		a.kind == "segment"
-		and b.kind == "disc"
+		and b.kind == "object"
 	then
-		PhysicsEngine.resolveSegmentCollision(
+		PhysicsEngine.resolveShapeVsSegmentCollision(
 			b :: any,
 			a :: any
-		)
-
-		return
-	end
-
-	if
-		a.kind == "disc"
-		and b.kind == "segment"
-	then
-		PhysicsEngine.resolveSegmentCollision(
-			a :: any,
-			b :: any
 		)
 
 		return
@@ -2830,26 +2574,16 @@ function PhysicsEngine.tryKick(
 			local objectCenter: Vector2?
 			local objectRadius: number?
 
-			if
-				object.pos
-				and object.radius
-			then
-				objectCenter = object.pos
-				objectRadius = object.radius
-			elseif
-				object.pos
-				and object.size
-			then
-				objectCenter = object.pos
+			if object.pos and object.size then
+				objectCenter =
+					object.pos
+
 				objectRadius =
-					math.sqrt(
-						(object.size.X * 0.5) ^ 2
-						+ (object.size.Y * 0.5) ^ 2
+					getObjectRadius(
+						object
 					)
-			elseif
-				object.a
-				and object.b
-			then
+
+			elseif object.a and object.b then
 				objectCenter =
 					(object.a + object.b) * 0.5
 
@@ -2865,12 +2599,13 @@ function PhysicsEngine.tryKick(
 			then
 				local delta =
 					objectCenter
-				- playerCenter
+					- playerCenter
 
 				local dist =
 					delta.Magnitude
 
-				if dist <=
+				if
+					dist <=
 					playerRadius
 					+ objectRadius
 					+ kickPhys.rangeExtra
@@ -2884,7 +2619,8 @@ function PhysicsEngine.tryKick(
 						or Vector2.new(1, 0)
 
 					object.vel +=
-						kickDir * kickPhys.force
+						kickDir
+						* kickPhys.force
 				end
 			end
 		end
@@ -2895,19 +2631,19 @@ end
 -- BROADPHASE UPDATES
 ----------------------------------------------------
 
-local function updateDiscBroadphase(
+local function updateObjectBroadphase(
 	broadphase: Broadphase,
-	disc: CircleObject
+	object: Object
 )
 	local entry =
-		broadphase.dynamicDiscEntries[disc]
+		broadphase.dynamicObjectEntries[object]
 
 	if entry then
-		broadphase.dynamicDiscEntries[disc] =
+		broadphase.dynamicObjectEntries[object] =
 			SpatialHash.update(
-				broadphase.dynamicDiscGrid,
+				broadphase.dynamicObjectGrid,
 				entry,
-				getCircleAABB(disc)
+				getObjectAABB(object)
 			)
 	end
 end
@@ -2925,23 +2661,6 @@ local function updateSegmentBroadphase(
 				broadphase.dynamicSegmentGrid,
 				entry,
 				getSegmentAABB(segment)
-			)
-	end
-end
-
-local function updateShapeBroadphase(
-	broadphase: Broadphase,
-	shape: PhysicalShape
-)
-	local entry =
-		broadphase.dynamicShapeEntries[shape]
-
-	if entry then
-		broadphase.dynamicShapeEntries[shape] =
-			SpatialHash.update(
-				broadphase.dynamicShapeGrid,
-				entry,
-				getShapeAABB(shape)
 			)
 	end
 end
@@ -2970,12 +2689,8 @@ end
 function PhysicsEngine.Step(
 	playersData,
 	sortedUserIds,
-	discs,
+	objects,
 	segments,
-	shapes,
-	collisionDiscs,
-	collisionSegments,
-	collisionShapes,
 	broadphase,
 	gameplay,
 	kickableObjects,
@@ -3050,12 +2765,7 @@ function PhysicsEngine.Step(
 			pData.vel *=
 				frictionFactor
 
-			if pData.kind == "disc" then
-				pData.pos =
-					(pData.pos :: Vector2)
-					+ pData.vel * fixedDt
-
-			elseif pData.kind == "shape" then
+			if pData.kind == "object" then
 				pData.pos =
 					(pData.pos :: Vector2)
 					+ pData.vel * fixedDt
@@ -3093,57 +2803,60 @@ function PhysicsEngine.Step(
 	-- SEGMENTS
 	------------------------------------------------
 
-	for _, seg in ipairs(segments) do
-		if seg.isStatic == false then
-			seg.vel =
-				(seg.vel or Vector2.zero)
-				* (seg.damping or 0.98)
+	for _, segment in ipairs(segments) do
+		if segment.isStatic == false then
+			local damping =
+				segment.damping or 0.98
 
-			seg.angularVelocity =
-				(seg.angularVelocity or 0)
-				* (seg.damping or 0.98)
+			segment.vel =
+				(segment.vel or Vector2.zero)
+				* damping
+
+			segment.angularVelocity =
+				(segment.angularVelocity or 0)
+				* damping
 
 			local delta =
-				seg.vel * fixedDt
+				segment.vel * fixedDt
 
-			seg.a += delta
-			seg.b += delta
+			segment.a += delta
+			segment.b += delta
 
 			integrateSegmentRotation(
-				seg,
+				segment,
 				fixedDt
 			)
 		end
 	end
 
 	------------------------------------------------
-	-- SHAPES
+	-- OBJECTS
 	------------------------------------------------
 
-	for _, shape in ipairs(shapes) do
-		if shape.isStatic == false then
+	for _, object in ipairs(objects) do
+		if object.isStatic == false then
 			local damping =
-				shape.damping or 0.98
+				object.damping or 0.98
 
-			shape.vel =
-				(shape.vel or Vector2.zero)
+			object.vel =
+				(object.vel or Vector2.zero)
 				* damping
 
-			shape.angularVelocity =
-				(shape.angularVelocity or 0)
+			object.angularVelocity =
+				(object.angularVelocity or 0)
 				* damping
 
-			shape.pos +=
-				shape.vel * fixedDt
+			object.pos +=
+				object.vel * fixedDt
 
-			if shape.rotationLocked ~= true then
-				shape.rotation =
-					(shape.rotation or 0)
-					+ (shape.angularVelocity or 0)
+			if object.rotationLocked ~= true then
+				object.rotation =
+					(object.rotation or 0)
+					+ (object.angularVelocity or 0)
 					* fixedDt
 
-				PhysicsEngine.prepareShape(
-					shape
+				PhysicsEngine.prepareObject(
+					object
 				)
 			end
 		end
@@ -3155,21 +2868,20 @@ function PhysicsEngine.Step(
 
 	PhysicsEngine.rebuildBroadphase(
 		broadphase,
-		collisionDiscs,
-		collisionSegments,
-		collisionShapes
+		objects,
+		segments
 	)
 
 	------------------------------------------------
-	-- DISCS
+	-- OBJECTS
 	------------------------------------------------
 
-	for _, disc in ipairs(discs) do
-		if disc.isStatic ~= true then
+	for _, object in ipairs(objects) do
+		if object.isStatic ~= true then
 			local steps =
 				math.clamp(
 					math.ceil(
-						disc.vel.Magnitude / 6
+						object.vel.Magnitude / 6
 					),
 					1,
 					4
@@ -3179,7 +2891,7 @@ function PhysicsEngine.Step(
 				fixedDt / steps
 
 			local damping =
-				disc.damping or 0.99
+				object.damping or 0.99
 
 			local dampingFactor =
 				math.pow(
@@ -3188,95 +2900,110 @@ function PhysicsEngine.Step(
 				)
 
 			for _ = 1, steps do
-				disc.vel *=
+				object.vel *=
 					dampingFactor
 
-				disc.pos +=
-					disc.vel * subDt
+				object.pos +=
+					object.vel * subDt
+
+				if object.rotationLocked ~= true then
+					object.rotation =
+						(object.rotation or 0)
+						+ (object.angularVelocity or 0)
+						* subDt
+
+					PhysicsEngine.prepareObject(
+						object
+					)
+				end
 
 				for _ = 1, 2 do
-					local discAABB =
-						getCircleAABB(disc)
+					local objectAABB =
+						getObjectAABB(object)
 
-					local nearbyDiscs =
+					------------------------------------------------
+					-- OBJECT VS OBJECT
+					------------------------------------------------
+
+					local nearbyObjects =
 						SpatialHash.queryCombined(
-							broadphase.staticDiscGrid,
-							broadphase.dynamicDiscGrid,
-							discAABB
+							broadphase.staticObjectGrid,
+							broadphase.dynamicObjectGrid,
+							objectAABB
 						)
 
-					for _, entry in ipairs(nearbyDiscs) do
+					for _, entry in ipairs(nearbyObjects) do
 						local other =
 							entry.object
 
-						if other ~= disc then
-							PhysicsEngine.resolveCircleCollision(
-								disc,
+						local otherIndex =
+							entry.index
+
+						local objectIndex =
+							broadphase.objectIndex[object]
+
+						if
+							other ~= object
+							and (
+								otherIndex
+								> (objectIndex or 0)
+							)
+						then
+							PhysicsEngine.resolveShapeVsShapeCollision(
+								object,
 								other
 							)
 
-							updateDiscBroadphase(
+							updateObjectBroadphase(
+								broadphase,
+								object
+							)
+
+							updateObjectBroadphase(
 								broadphase,
 								other
 							)
 
-							updateDiscBroadphase(
-								broadphase,
-								disc
-							)
+							objectAABB =
+								getObjectAABB(object)
 						end
 					end
 
-					discAABB =
-						getCircleAABB(disc)
+					------------------------------------------------
+					-- OBJECT VS SEGMENT
+					------------------------------------------------
+
+					objectAABB =
+						getObjectAABB(object)
 
 					local nearbySegments =
 						SpatialHash.queryCombined(
 							broadphase.staticSegmentGrid,
 							broadphase.dynamicSegmentGrid,
-							discAABB
+							objectAABB
 						)
 
 					for _, entry in ipairs(nearbySegments) do
-						PhysicsEngine.resolveSegmentCollision(
-							disc,
-							entry.object
-						)
-
-						updateDiscBroadphase(
-							broadphase,
-							disc
-						)
-					end
-
-					discAABB =
-						getCircleAABB(disc)
-
-					local nearbyShapes =
-						SpatialHash.queryCombined(
-							broadphase.staticShapeGrid,
-							broadphase.dynamicShapeGrid,
-							discAABB
-						)
-
-					for _, entry in ipairs(nearbyShapes) do
-						local shape =
+						local segment =
 							entry.object
 
-						PhysicsEngine.resolveShapeCollision(
-							disc,
-							shape
+						PhysicsEngine.resolveShapeVsSegmentCollision(
+							object,
+							segment
 						)
 
-						updateDiscBroadphase(
+						updateObjectBroadphase(
 							broadphase,
-							disc
+							object
 						)
 
-						updateShapeBroadphase(
+						updateSegmentBroadphase(
 							broadphase,
-							shape
+							segment
 						)
+
+						objectAABB =
+							getObjectAABB(object)
 					end
 				end
 			end
@@ -3284,64 +3011,67 @@ function PhysicsEngine.Step(
 	end
 
 	------------------------------------------------
-	-- SHAPES / SEGMENTS / PLAYERS
+	-- OBJECT VS OBJECT / SEGMENTS / PLAYERS
 	------------------------------------------------
 
 	for _ = 1, 2 do
 		------------------------------------------------
-		-- SHAPE VS SHAPE
+		-- OBJECT VS OBJECT
 		------------------------------------------------
 
-		for idxA, shapeA in ipairs(collisionShapes) do
-			local shapeAABB =
-				getShapeAABB(shapeA)
+		for idxA, objectA in ipairs(objects) do
+			local objectAABB =
+				getObjectAABB(objectA)
 
-			local nearbyShapes =
+			local nearbyObjects =
 				SpatialHash.queryCombined(
-					broadphase.staticShapeGrid,
-					broadphase.dynamicShapeGrid,
-					shapeAABB
+					broadphase.staticObjectGrid,
+					broadphase.dynamicObjectGrid,
+					objectAABB
 				)
 
-			for _, entry in ipairs(nearbyShapes) do
-				local shapeB =
+			for _, entry in ipairs(nearbyObjects) do
+				local objectB =
 					entry.object
 
 				local idxB =
 					entry.index
 
-				if idxB > idxA then
+				if
+					objectB ~= objectA
+					and idxB > idxA
+				then
 					PhysicsEngine.resolveShapeVsShapeCollision(
-						shapeA,
-						shapeB
+						objectA,
+						objectB
 					)
 
-					updateShapeBroadphase(
+					updateObjectBroadphase(
 						broadphase,
-						shapeA
+						objectA
 					)
 
-					updateShapeBroadphase(
+					updateObjectBroadphase(
 						broadphase,
-						shapeB
+						objectB
 					)
 				end
 			end
 		end
 
 		------------------------------------------------
-		-- SHAPE VS SEGMENT
+		-- OBJECT VS SEGMENT
 		------------------------------------------------
 
-		for _, shape in ipairs(collisionShapes) do
-			local shapeAABB =
-				getShapeAABB(shape)
+		for _, object in ipairs(objects) do
+			local objectAABB =
+				getObjectAABB(object)
 
 			local nearbySegments =
 				SpatialHash.queryCombined(
 					broadphase.staticSegmentGrid,
 					broadphase.dynamicSegmentGrid,
-					shapeAABB
+					objectAABB
 				)
 
 			for _, entry in ipairs(nearbySegments) do
@@ -3349,54 +3079,18 @@ function PhysicsEngine.Step(
 					entry.object
 
 				PhysicsEngine.resolveShapeVsSegmentCollision(
-					shape,
+					object,
 					segment
 				)
 
-				updateShapeBroadphase(
+				updateObjectBroadphase(
 					broadphase,
-					shape
+					object
 				)
 
 				updateSegmentBroadphase(
 					broadphase,
 					segment
-				)
-			end
-		end
-
-		------------------------------------------------
-		-- SHAPE VS DISC
-		------------------------------------------------
-
-		for _, shape in ipairs(collisionShapes) do
-			local shapeAABB =
-				getShapeAABB(shape)
-
-			local nearbyDiscs =
-				SpatialHash.queryCombined(
-					broadphase.staticDiscGrid,
-					broadphase.dynamicDiscGrid,
-					shapeAABB
-				)
-
-			for _, entry in ipairs(nearbyDiscs) do
-				local disc =
-					entry.object
-
-				PhysicsEngine.resolveShapeCollision(
-					disc,
-					shape
-				)
-
-				updateDiscBroadphase(
-					broadphase,
-					disc
-				)
-
-				updateShapeBroadphase(
-					broadphase,
-					shape
 				)
 			end
 		end
@@ -3414,23 +3108,23 @@ function PhysicsEngine.Step(
 					getPlayerAABB(pA)
 
 				------------------------------------------------
-				-- PLAYER VS DISC
+				-- PLAYER VS OBJECT
 				------------------------------------------------
 
-				local nearbyDiscs =
+				local nearbyObjects =
 					SpatialHash.queryCombined(
-						broadphase.staticDiscGrid,
-						broadphase.dynamicDiscGrid,
+						broadphase.staticObjectGrid,
+						broadphase.dynamicObjectGrid,
 						playerAABB
 					)
 
-				for _, entry in ipairs(nearbyDiscs) do
-					local disc =
+				for _, entry in ipairs(nearbyObjects) do
+					local object =
 						entry.object
 
-					resolvePlayerVsDisc(
+					resolvePlayerVsObject(
 						pA,
-						disc
+						object
 					)
 
 					updatePlayerBroadphase(
@@ -3438,9 +3132,9 @@ function PhysicsEngine.Step(
 						pA
 					)
 
-					updateDiscBroadphase(
+					updateObjectBroadphase(
 						broadphase,
-						disc
+						object
 					)
 
 					playerAABB =
@@ -3497,9 +3191,12 @@ function PhysicsEngine.Step(
 					)
 
 				for _, entry in ipairs(nearbySegments) do
+					local segment =
+						entry.object
+
 					resolvePlayerVsSegment(
 						pA,
-						entry.object
+						segment
 					)
 
 					updatePlayerBroadphase(
@@ -3509,78 +3206,11 @@ function PhysicsEngine.Step(
 
 					updateSegmentBroadphase(
 						broadphase,
-						entry.object
+						segment
 					)
 
 					playerAABB =
 						getPlayerAABB(pA)
-				end
-
-				------------------------------------------------
-				-- PLAYER VS SHAPE
-				------------------------------------------------
-
-				local nearbyShapes =
-					SpatialHash.queryCombined(
-						broadphase.staticShapeGrid,
-						broadphase.dynamicShapeGrid,
-						playerAABB
-					)
-
-				for _, entry in ipairs(nearbyShapes) do
-					local shape =
-						entry.object
-
-					resolvePlayerVsShape(
-						pA,
-						shape
-					)
-
-					updatePlayerBroadphase(
-						broadphase,
-						pA
-					)
-
-					updateShapeBroadphase(
-						broadphase,
-						shape
-					)
-
-					playerAABB =
-						getPlayerAABB(pA)
-				end
-			end
-		end
-
-		------------------------------------------------
-		-- DISC VS SEGMENT
-		------------------------------------------------
-
-		for _, disc in ipairs(discs) do
-			if disc.isStatic == false then
-				local discAABB =
-					getCircleAABB(disc)
-
-				local nearbySegments =
-					SpatialHash.queryCombined(
-						broadphase.staticSegmentGrid,
-						broadphase.dynamicSegmentGrid,
-						discAABB
-					)
-
-				for _, entry in ipairs(nearbySegments) do
-					PhysicsEngine.resolveSegmentCollision(
-						disc,
-						entry.object
-					)
-
-					updateDiscBroadphase(
-						broadphase,
-						disc
-					)
-
-					discAABB =
-						getCircleAABB(disc)
 				end
 			end
 		end
