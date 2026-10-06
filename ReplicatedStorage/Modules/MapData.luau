@@ -147,10 +147,26 @@ MapData.Default = {
 	},
 
 	----------------------------------------------------
-	-- SHAPES
+	-- OBJECTS
+	--
+	-- Todo objeto representado como um Frame no GUI
+	-- fica nesta coleção.
+	--
+	-- A geometria é determinada por:
+	--   pos
+	--   size
+	--   cornerRadius
+	--   rotation
+	--
+	-- Um círculo é apenas um objeto com width = height
+	-- e cornerRadius equivalente a 50%.
 	----------------------------------------------------
 
-	shapes = {
+	objects = {
+
+		------------------------------------------------
+		-- ÁREA ESQUERDA
+		------------------------------------------------
 
 		{
 			pos = { x = -340, y = 0 },
@@ -167,6 +183,10 @@ MapData.Default = {
 			isSolid = false,
 		},
 
+		------------------------------------------------
+		-- ÁREA DIREITA
+		------------------------------------------------
+
 		{
 			pos = { x = 340, y = 0 },
 			size = { x = 120, y = 220 },
@@ -181,6 +201,10 @@ MapData.Default = {
 
 			isSolid = false,
 		},
+
+		------------------------------------------------
+		-- CÍRCULO CENTRAL
+		------------------------------------------------
 
 		{
 			pos = { x = 0, y = 0 },
@@ -197,6 +221,10 @@ MapData.Default = {
 			isSolid = false,
 		},
 
+		------------------------------------------------
+		-- PEQUENO CÍRCULO CENTRAL
+		------------------------------------------------
+
 		{
 			pos = { x = 0, y = 0 },
 			size = { x = 15, y = 15 },
@@ -209,6 +237,10 @@ MapData.Default = {
 
 			isSolid = false,
 		},
+
+		------------------------------------------------
+		-- OBSTÁCULO
+		------------------------------------------------
 
 		{
 			pos = { x = 0, y = 100 },
@@ -228,6 +260,10 @@ MapData.Default = {
 			cMask = "all",
 		},
 
+		------------------------------------------------
+		-- OBSTÁCULO CENTRAL MÓVEL
+		------------------------------------------------
+
 		{
 			id = "obstaculo_central",
 
@@ -243,7 +279,7 @@ MapData.Default = {
 
 			isSolid = true,
 			isStatic = false,
-			
+
 			rotation = 90,
 			rotationLocked = false,
 			angularVelocity = 0,
@@ -254,6 +290,146 @@ MapData.Default = {
 
 			cGroup = {"obstacle"},
 			cMask = {"goal", "player"},
+		},
+
+		------------------------------------------------
+		-- MODELO DOS JOGADORES
+		------------------------------------------------
+
+		{
+			id = "player_body",
+
+			pos = { x = 0, y = 0 },
+			size = { x = 36, y = 36 },
+
+			cornerRadius = UDim.new(0.5, 0),
+
+			mass = 5,
+			restitution = 0.15,
+
+			isStatic = false,
+			isSolid = true,
+
+			cGroup = {"player"},
+
+			cMask = {
+				"player",
+				"goal",
+				"obstacle",
+			},
+
+			color = Color3.fromRGB(255, 255, 255),
+
+			strokeWidth = 3,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+		},
+
+		------------------------------------------------
+		-- OBJETO FÍSICO USADO PELO GAMEPLAY
+		------------------------------------------------
+
+		{
+			id = "game_object",
+
+			pos = { x = 0, y = 0 },
+			size = { x = 26, y = 26 },
+
+			cornerRadius = UDim.new(0.5, 0),
+
+			mass = 1,
+			damping = 0.99,
+			restitution = 0.5,
+
+			isStatic = false,
+			isSolid = true,
+
+			cGroup = "all",
+			cMask = "all",
+
+			color = Color3.fromRGB(255, 255, 255),
+
+			strokeWidth = 3,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+		},
+
+		------------------------------------------------
+		-- MARCADOR DE GOL ESQUERDO SUPERIOR
+		------------------------------------------------
+
+		{
+			pos = { x = -400, y = -75 },
+
+			size = { x = 10, y = 10 },
+
+			cornerRadius = UDim.new(0.5, 0),
+
+			color = Color3.fromRGB(255, 255, 255),
+
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		------------------------------------------------
+		-- MARCADOR DE GOL ESQUERDO INFERIOR
+		------------------------------------------------
+
+		{
+			pos = { x = -400, y = 75 },
+
+			size = { x = 10, y = 10 },
+
+			cornerRadius = UDim.new(0.5, 0),
+
+			color = Color3.fromRGB(255, 255, 255),
+
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		------------------------------------------------
+		-- MARCADOR DE GOL DIREITO SUPERIOR
+		------------------------------------------------
+
+		{
+			pos = { x = 400, y = -75 },
+
+			size = { x = 10, y = 10 },
+
+			cornerRadius = UDim.new(0.5, 0),
+
+			color = Color3.fromRGB(255, 255, 255),
+
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+
+			cGroup = {"goal"},
+			cMask = "all",
+		},
+
+		------------------------------------------------
+		-- MARCADOR DE GOL DIREITO INFERIOR
+		------------------------------------------------
+
+		{
+			pos = { x = 400, y = 75 },
+
+			size = { x = 10, y = 10 },
+
+			cornerRadius = UDim.new(0.5, 0),
+
+			color = Color3.fromRGB(255, 255, 255),
+
+			strokeWidth = 1,
+			strokeColor = Color3.fromRGB(0, 0, 0),
+
+			cGroup = {"goal"},
+			cMask = "all",
 		},
 	},
 
@@ -539,131 +715,6 @@ MapData.Default = {
 			restitution = 0,
 
 			cGroup = {"wall"},
-			cMask = "all",
-		},
-	},
-
-	----------------------------------------------------
-	-- DISCS
-	----------------------------------------------------
-
-	discs = {
-
-		------------------------------------------------
-		-- MODELO DOS JOGADORES
-		------------------------------------------------
-
-		{
-			id = "player_body",
-
-			pos = { x = 0, y = 0 },
-
-			radius = 18,
-
-			mass = 5,
-			restitution = 0.15,
-
-			isStatic = false,
-			isSolid = true,
-
-			cGroup = {"player"},
-
-			cMask = {
-				"player",
-				"goal",
-				"obstacle",
-			},
-
-			color = Color3.fromRGB(255, 255, 255),
-
-			strokeWidth = 3,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-		},
-
-		------------------------------------------------
-		-- OBJETO FÍSICO USADO PELO GAMEPLAY
-		------------------------------------------------
-
-		{
-			id = "game_object",
-
-			pos = { x = 0, y = 0 },
-
-			radius = 13,
-
-			mass = 1,
-			damping = 0.99,
-			restitution = 0.5,
-
-			isStatic = false,
-			isSolid = true,
-
-			cGroup = "all",
-			cMask = "all",
-
-			color = Color3.fromRGB(255, 255, 255),
-
-			strokeWidth = 3,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-		},
-
-		------------------------------------------------
-		-- MARCADORES DE GOL
-		------------------------------------------------
-
-		{
-			pos = { x = -400, y = -75 },
-
-			radius = 5,
-
-			color = Color3.fromRGB(255, 255, 255),
-
-			strokeWidth = 1,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-
-			cGroup = {"goal"},
-			cMask = "all",
-		},
-
-		{
-			pos = { x = -400, y = 75 },
-
-			radius = 5,
-
-			color = Color3.fromRGB(255, 255, 255, 255),
-
-			strokeWidth = 1,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-
-			cGroup = {"goal"},
-			cMask = "all",
-		},
-
-		{
-			pos = { x = 400, y = -75 },
-
-			radius = 5,
-
-			color = Color3.fromRGB(255, 255, 255),
-
-			strokeWidth = 1,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-
-			cGroup = {"goal"},
-			cMask = "all",
-		},
-
-		{
-			pos = { x = 400, y = 75 },
-
-			radius = 5,
-
-			color = Color3.fromRGB(255, 255, 255),
-
-			strokeWidth = 1,
-			strokeColor = Color3.fromRGB(0, 0, 0),
-
-			cGroup = {"goal"},
 			cMask = "all",
 		},
 	},
