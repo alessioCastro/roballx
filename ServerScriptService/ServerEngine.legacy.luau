@@ -834,6 +834,12 @@ end
 local team1 = Teams:WaitForChild("Team1")
 local team2 = Teams:WaitForChild("Team2")
 
+local TeamSettings =require(replicatedModules:WaitForChild("TeamSettings"))
+
+team1.Name = TeamSettings.teams.Team1.name
+
+team2.Name = TeamSettings.teams.Team2.name
+
 ----------------------------------------------------
 -- CICLO DE VIDA DOS JOGADORES
 ----------------------------------------------------
