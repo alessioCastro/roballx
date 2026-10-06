@@ -5,6 +5,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local Teams = game:GetService("Teams")
 local RunService = game:GetService("RunService")
 
 local replicatedModules = ReplicatedStorage:WaitForChild("Modules")
@@ -795,59 +796,70 @@ local function createPlayerFromTemplate(
 end
 
 local function getNextSpawnIndex(
-	team: string
+    team: string
 ): number
-	local spawnPositions
+    local spawnPositions
 
-	if team == "Red" then
-		spawnPositions =
-			playerGameplay.spawn.team1Positions
-	else
-		spawnPositions =
-			playerGameplay.spawn.team2Positions
-	end
+    if team == "Team1" then
+        spawnPositions =
+            playerGameplay.spawn.team1Positions
+    else
+        spawnPositions =
+            playerGameplay.spawn.team2Positions
+    end
 
-	for index = 1, #spawnPositions do
-		local occupied = false
+    for index = 1, #spawnPositions do
+        local occupied = false
 
-		for _, pData in pairs(playersData) do
-			if pData.team == team
-				and pData.spawnIndex == index
-			then
-				occupied = true
-				break
-			end
-		end
+        for _, pData in pairs(playersData) do
+            if pData.team == team
+                and pData.spawnIndex == index
+            then
+                occupied = true
+                break
+            end
+        end
 
-		if not occupied then
-			return index
-		end
-	end
+        if not occupied then
+            return index
+        end
+    end
 
-	error(
-		"Não existem posições de spawn suficientes para o time "
-		.. team
-	)
+    error(
+        "Não existem posições de spawn suficientes para o time "
+        .. team
+    )
 end
+
+local team1 = Teams:WaitForChild("Team1")
+local team2 = Teams:WaitForChild("Team2")
 
 ----------------------------------------------------
 -- CICLO DE VIDA DOS JOGADORES
 ----------------------------------------------------
 
 Players.PlayerAdded:Connect(function(plr)
-	local isRed =
+	local isTeam1 =
 		(#Players:GetPlayers() % 2 ~= 0)
 
+	local robloxTeam =
+		isTeam1
+		and team1
+		or team2
+
 	local team =
-		isRed
-		and "Red"
-		or "Blue"
+		isTeam1
+		and "Team1"
+		or "Team2"
+
+	plr.Team = robloxTeam
+	plr.Neutral = false
 
 	local spawnIndex =
 		getNextSpawnIndex(team)
 
 	local spawnPositions =
-		isRed
+		isTeam1
 		and playerGameplay.spawn.team1Positions
 		or playerGameplay.spawn.team2Positions
 
