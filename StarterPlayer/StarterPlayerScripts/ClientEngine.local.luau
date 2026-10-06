@@ -46,16 +46,11 @@ local HUDRenderer =
 -- SERVIDOR RESERVADO
 ----------------------------------------------------
 
-local inReservedServer =
-	ReplicatedStorage:GetAttribute("IsRoomServer")
+local inReservedServer = ReplicatedStorage:GetAttribute("IsRoomServer")
 
 if inReservedServer == nil then
-	ReplicatedStorage:GetAttributeChangedSignal(
-		"IsRoomServer"
-	):Wait()
-
-	inReservedServer =
-		ReplicatedStorage:GetAttribute("IsRoomServer")
+	ReplicatedStorage:GetAttributeChangedSignal("IsRoomServer"):Wait()
+	inReservedServer = ReplicatedStorage:GetAttribute("IsRoomServer")
 end
 
 --if not inReservedServer then return end
@@ -892,8 +887,8 @@ local function createPlayerFromSnapshot(
 
 	local team =
 		pArr[10] == 1
-		and "Red"
-		or "Blue"
+		and "Team1"
+		or "Team2"
 
 	local collisionGroup =
 		buildBitmask(
@@ -1403,7 +1398,7 @@ local function createPlayerRender(
 ): PlayerRender
 
 	local color =
-		pData.team == "Red"
+		pData.team == "Team1"
 		and Color3.fromRGB(
 			220,
 			60,
