@@ -1050,9 +1050,8 @@ RunService.Heartbeat:Connect(function(dt)
 
 				playersData,
 
-				dynamicDiscs,
-				dynamicSegments,
-				dynamicShapes,
+				objects,
+				segments,
 
 				scoreRed,
 				scoreBlue,
