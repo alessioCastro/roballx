@@ -125,23 +125,23 @@ MapData.Default = {
 		scoring = {
 
 			{
-				id = "left_goal",
-				object = "game_object",
-
-				team = "Blue",
-
-				min = { x = -440, y = -75 },
-				max = { x = -400, y = 75 },
-			},
-
-			{
 				id = "right_goal",
-				object = "game_object",
+				objects = {"game_object"},
 
-				team = "Red",
+				team = "Team1",
 
 				min = { x = 400, y = -75 },
 				max = { x = 440, y = 75 },
+			},
+
+			{
+				id = "left_goal",
+				objects = {"game_object"},
+
+				team = "Team2",
+
+				min = { x = -440, y = -75 },
+				max = { x = -400, y = 75 },
 			},
 		},
 	},
@@ -244,7 +244,7 @@ MapData.Default = {
 			isSolid = true,
 			isStatic = false,
 			
-			rotation = 0,
+			rotation = 90,
 			rotationLocked = false,
 			angularVelocity = 0,
 
