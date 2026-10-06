@@ -424,85 +424,67 @@ local objects:
 	{PhysicsEngine.Object} = {}
 
 if currentMap.objects then
-	for idx, objectData in ipairs(currentMap.objects) do
+	for idx, object in ipairs(currentMap.objects) do
 
-		-- O playerObject é um molde, não um objeto
-		-- físico independente do mapa.
+		-- O objeto usado como player é apenas molde.
+		-- Ele será criado a partir dos snapshots dos players.
 
-		if objectData.id ~= playerObjectId then
+		if object.id ~= playerObjectId then
 
-			local cornerPx = 0
-
-			if typeof(objectData.cornerRadius) == "UDim" then
-
-				cornerPx =
-					math.min(
-						objectData.size.X,
-						objectData.size.Y
-					)
-					* objectData.cornerRadius.Scale
-					+ objectData.cornerRadius.Offset
-
-			elseif typeof(objectData.cornerRadius) == "number" then
-
-				cornerPx =
-					objectData.cornerRadius
-			end
-
-			local object:
+			local objectData:
 				PhysicsEngine.Object = {
 
 				id =
-					objectData.id
+					object.id
 					or ("object_" .. idx),
 
 				pos =
-					objectData.pos,
+					object.pos,
 
 				vel =
 					Vector2.zero,
 
 				size =
-					objectData.size,
-
-				mass =
-					objectData.mass or 1,
-
-				restitution =
-					objectData.restitution or 0.5,
-
-				isStatic =
-					(objectData.isStatic ~= false),
-
-				isSolid =
-					(objectData.isSolid ~= false),
-
-				damping =
-					objectData.damping or 0.98,
-
-				resettable =
-					(objectData.resettable ~= false),
+					object.size,
 
 				rotation =
-					objectData.rotation or 0,
+					object.rotation or 0,
 
 				rotationLocked =
-					(objectData.rotationLocked ~= false),
+					(object.rotationLocked ~= false),
 
 				angularVelocity =
-					objectData.angularVelocity or 0,
+					object.angularVelocity or 0,
 
 				cornerRadius =
-					cornerPx,
+					object.cornerRadius,
+
+				mass =
+					object.mass or 1,
+
+				restitution =
+					object.restitution or 0.5,
+
+				isStatic =
+					(object.isStatic ~= false),
+
+				isSolid =
+					(object.isSolid ~= false),
+
+				damping =
+					object.damping or 0.98,
+
+				resettable =
+					(object.resettable ~= false),
 
 				cGroup =
 					buildBitmask(
-						objectData.cGroup
+						object.cGroup
 					),
 
 				cMask =
 					buildBitmask(
-						objectData.cMask
+						object.cMask
 					),
 
 				segmentP1 =
@@ -516,11 +498,11 @@ if currentMap.objects then
 			}
 
 			PhysicsEngine.prepareObject(
-				object
+				objectData
 			)
 
 			objects[#objects + 1] =
-				object
+				objectData
 		end
 	end
 end
@@ -573,6 +555,7 @@ then
 end
 
 if not playerTemplate then
+
 	error(
 		"MapData.gameplay.player.object referencia um objeto inexistente: "
 			.. tostring(playerObjectId)
@@ -595,12 +578,12 @@ for _, object in ipairs(objects) do
 	end
 end
 
-for _, segment in ipairs(segments) do
+for _, object in ipairs(segments) do
 
-	if segment.isStatic == false then
+	if object.isStatic == false then
 
-		dynamicObjects[segment.id] =
-			segment
+		dynamicObjects[object.id] =
+			object
 	end
 end
 
@@ -620,12 +603,12 @@ for _, object in ipairs(objects) do
 	end
 end
 
-for _, segment in ipairs(segments) do
+for _, object in ipairs(segments) do
 
-	if segment.id then
+	if object.id then
 
-		objectsById[segment.id] =
-			segment
+		objectsById[object.id] =
+			object
 	end
 end
 
@@ -658,8 +641,7 @@ end
 -- OBJETOS DE COLISÃO
 ----------------------------------------------------
 
-local collisionObjects:
-	{PhysicsEngine.Object} = {}
+local collisionObjects = {}
 
 for _, object in ipairs(objects) do
 
@@ -670,15 +652,14 @@ for _, object in ipairs(objects) do
 	end
 end
 
-local collisionSegments:
-	{PhysicsEngine.Segment} = {}
+local collisionSegments = {}
 
-for _, segment in ipairs(segments) do
+for _, seg in ipairs(segments) do
 
-	if segment.isSolid ~= false then
+	if seg.isSolid ~= false then
 
 		collisionSegments[#collisionSegments + 1] =
-			segment
+			seg
 	end
 end
 
@@ -690,163 +671,6 @@ local broadphase =
 	PhysicsEngine.createBroadphase(
 		collisionObjects,
 		collisionSegments,
-		64
-	)
-
-----------------------------------------------------
--- MOLDE DO PLAYER
-----------------------------------------------------
-
-local playerTemplate:any = nil
-
-if currentMap.objects then
-
-	for _, object in ipairs(currentMap.objects) do
-
-		if object.id == playerObjectId then
-
-			playerTemplate = object
-
-			break
-		end
-	end
-end
-
-if not playerTemplate
-	and currentMap.segments
-then
-
-	for _, segment in ipairs(currentMap.segments) do
-
-		if segment.id == playerObjectId then
-
-			playerTemplate =
-				segment
-
-			break
-		end
-	end
-end
-
-if not playerTemplate then
-	error(
-		"MapData.gameplay.player.object referencia um objeto inexistente: "
-			.. tostring(playerObjectId)
-	)
-end
-
-----------------------------------------------------
--- OBJETOS DINÂMICOS
-----------------------------------------------------
-
-local dynamicObjects:
-	{[string]: any} = {}
-
-for _, object in ipairs(shapes) do
-	if object.isStatic == false then
-		dynamicObjects[object.id] = object
-	end
-end
-
-for _, object in ipairs(discs) do
-	if object.isStatic == false then
-		dynamicObjects[object.id] = object
-	end
-end
-
-for _, object in ipairs(segments) do
-	if object.isStatic == false then
-		dynamicObjects[object.id] = object
-	end
-end
-
-----------------------------------------------------
--- OBJETOS POR ID
-----------------------------------------------------
-
-local objectsById:
-	{[string]: any} = {}
-
-for _, object in ipairs(discs) do
-	if object.id then
-		objectsById[object.id] = object
-	end
-end
-
-for _, object in ipairs(segments) do
-	if object.id then
-		objectsById[object.id] = object
-	end
-end
-
-for _, object in ipairs(shapes) do
-	if object.id then
-		objectsById[object.id] = object
-	end
-end
-
-----------------------------------------------------
--- OBJETOS CHUTÁVEIS
-----------------------------------------------------
-
-local kickableObjects:
-	{any} = {}
-
-local kickableIds =
-	currentMap.gameplay.kickable
-
-if kickableIds then
-	for _, id in ipairs(kickableIds) do
-		local object =
-			objectsById[id]
-
-		if object then
-			kickableObjects[#kickableObjects + 1] =
-				object
-		end
-	end
-end
-
-----------------------------------------------------
--- OBJETOS DE COLISÃO
-----------------------------------------------------
-
-local collisionDiscs = {}
-
-for _, d in ipairs(discs) do
-	if d.isSolid ~= false then
-		collisionDiscs[#collisionDiscs + 1] =
-			d
-	end
-end
-
-local collisionSegments = {}
-
-for _, seg in ipairs(segments) do
-	if seg.isSolid ~= false then
-		collisionSegments[#collisionSegments + 1] =
-			seg
-	end
-end
-
-local collisionShapes = {}
-
-for _, s in ipairs(shapes) do
-	if s.isSolid ~= false then
-		collisionShapes[#collisionShapes + 1] =
-			s
-	end
-end
-
-----------------------------------------------------
--- BROADPHASE
-----------------------------------------------------
-
-local broadphase =
-	PhysicsEngine.createBroadphase(
-		collisionDiscs,
-		collisionSegments,
-		collisionShapes,
 		64
 	)
 
@@ -919,13 +743,11 @@ local function createPlayerFromSnapshot(
 
 	if kindCode == 2 then
 
-		kind =
-			"segment"
+		kind = "segment"
 
 	else
 
-		kind =
-			"object"
+		kind = "object"
 	end
 
 	local team =
@@ -943,127 +765,16 @@ local function createPlayerFromSnapshot(
 			playerGameplay.collision.mask
 		)
 
-	------------------------------------------------
-	-- SEGMENT
-	------------------------------------------------
-
-	if kind == "segment" then
-
-		return {
-
-			kind =
-				"segment",
-
-			id =
-				playerObjectId,
-
-			vel =
-				Vector2.new(
-					pArr[4],
-					pArr[5]
-				),
-
-			a =
-				Vector2.new(
-					pArr[12],
-					pArr[13]
-				),
-
-			b =
-				Vector2.new(
-					pArr[14],
-					pArr[15]
-				),
-
-			thickness =
-				playerTemplate.thickness,
-
-			ignoreCapA =
-				playerTemplate.ignoreCapA,
-
-			ignoreCapB =
-				playerTemplate.ignoreCapB,
-
-			mass =
-				playerTemplate.mass or 1,
-
-			restitution =
-				playerTemplate.restitution or 0.1,
-
-			isStatic =
-				false,
-
-			isSolid =
-				true,
-
-			team =
-				team,
-
-			input =
-				Vector2.new(
-					pArr[6],
-					pArr[7]
-				),
-
-			isKicking =
-				pArr[8] == 1,
-
-			lastKickTick =
-				pArr[9],
-
-			cGroup =
-				collisionGroup,
-
-			cMask =
-				collisionMask
-		}
-	end
-
-	------------------------------------------------
-	-- OBJECT
-	------------------------------------------------
-
-	local cornerPx = 0
-
-	if typeof(playerTemplate.cornerRadius) == "UDim" then
-
-		cornerPx =
-			math.min(
-				playerTemplate.size.X,
-				playerTemplate.size.Y
-			)
-			* playerTemplate.cornerRadius.Scale
-			+ playerTemplate.cornerRadius.Offset
-
-	elseif typeof(playerTemplate.cornerRadius) == "number" then
-
-		cornerPx =
-			playerTemplate.cornerRadius
-	end
-
-	local playerObject:
-		PhysicsEngine.PlayerObject = {
-
-		kind =
-			"object",
+	local common = {
 
 		id =
 			playerObjectId,
-
-		pos =
-			Vector2.new(
-				pArr[2],
-				pArr[3]
-			),
 
 		vel =
 			Vector2.new(
 				pArr[4],
 				pArr[5]
 			),
-
-		size =
-			playerTemplate.size,
 
 		mass =
 			playerTemplate.mass or 1,
@@ -1092,109 +803,168 @@ local function createPlayerFromSnapshot(
 		lastKickTick =
 			pArr[9],
 
-		rotation =
-			playerTemplate.rotation or 0,
-
-		rotationLocked =
-			(playerTemplate.rotationLocked ~= false),
-
-		angularVelocity =
-			0,
-
-		cornerRadius =
-			cornerPx,
-
 		cGroup =
 			collisionGroup,
 
 		cMask =
-			collisionMask,
-
-		segmentP1 =
-			Vector2.zero,
-
-		segmentP2 =
-			Vector2.zero,
-
-		segmentRadius =
-			0
+			collisionMask
 	}
 
-	local temporaryObject:
-		PhysicsEngine.Object = {
+	------------------------------------------------
+	-- OBJECT
+	------------------------------------------------
+
+	if kind == "object" then
+
+		local cornerRadius =
+			playerTemplate.cornerRadius
+
+		local playerObject:
+			PhysicsEngine.PlayerObject = {
+
+			kind =
+				"object",
+
+			id =
+				common.id,
+
+			pos =
+				Vector2.new(
+					pArr[2],
+					pArr[3]
+				),
+
+			vel =
+				common.vel,
+
+			mass =
+				common.mass,
+
+			restitution =
+				common.restitution,
+
+			size =
+				playerTemplate.size,
+
+			rotation =
+				playerTemplate.rotation or 0,
+
+			cornerRadius =
+				cornerRadius,
+
+			segmentP1 =
+				Vector2.zero,
+
+			segmentP2 =
+				Vector2.zero,
+
+			segmentRadius =
+				0,
+
+			isStatic =
+				common.isStatic,
+
+			isSolid =
+				common.isSolid,
+
+			team =
+				common.team,
+
+			input =
+				common.input,
+
+			isKicking =
+				common.isKicking,
+
+			lastKickTick =
+				common.lastKickTick,
+
+			cGroup =
+				common.cGroup,
+
+			cMask =
+				common.cMask
+		}
+
+		PhysicsEngine.prepareObject(
+			playerObject
+		)
+
+		return playerObject
+	end
+
+	------------------------------------------------
+	-- SEGMENT
+	------------------------------------------------
+
+	local a =
+		Vector2.new(
+			pArr[12],
+			pArr[13]
+		)
+
+	local b =
+		Vector2.new(
+			pArr[14],
+			pArr[15]
+		)
+
+	return {
+
+		kind =
+			"segment",
 
 		id =
-			playerObjectId,
-
-		pos =
-			playerObject.pos :: Vector2,
+			common.id,
 
 		vel =
-			Vector2.zero,
+			common.vel,
 
-		size =
-			playerTemplate.size,
+		a =
+			a,
+
+		b =
+			b,
+
+		thickness =
+			playerTemplate.thickness,
+
+		ignoreCapA =
+			playerTemplate.ignoreCapA,
+
+		ignoreCapB =
+			playerTemplate.ignoreCapB,
 
 		mass =
-			playerObject.mass,
+			common.mass,
 
 		restitution =
-			playerObject.restitution,
+			common.restitution,
 
 		isStatic =
-			false,
+			common.isStatic,
 
 		isSolid =
-			true,
+			common.isSolid,
 
-		damping =
-			playerTemplate.damping or 0.98,
+		team =
+			common.team,
 
-		resettable =
-			false,
+		input =
+			common.input,
 
-		rotation =
-			playerTemplate.rotation or 0,
+		isKicking =
+			common.isKicking,
 
-		rotationLocked =
-			(playerTemplate.rotationLocked ~= false),
-
-		angularVelocity =
-			0,
-
-		cornerRadius =
-			cornerPx,
+		lastKickTick =
+			common.lastKickTick,
 
 		cGroup =
-			collisionGroup,
+			common.cGroup,
 
 		cMask =
-			collisionMask,
-
-		segmentP1 =
-			Vector2.zero,
-
-		segmentP2 =
-			Vector2.zero,
-
-		segmentRadius =
-			0
+			common.cMask
 	}
-
-	PhysicsEngine.prepareObject(
-		temporaryObject
-	)
-
-	playerObject.segmentP1 =
-		temporaryObject.segmentP1
-
-	playerObject.segmentP2 =
-		temporaryObject.segmentP2
-
-	playerObject.segmentRadius =
-		temporaryObject.segmentRadius
-
-	return playerObject
 end
 
 ----------------------------------------------------
@@ -1573,7 +1343,12 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		-- RESTORE DO SNAPSHOT
 		------------------------------------------------
 
-		GameState.restorePacked(packed, playersData, objects, segments)
+		GameState.restorePacked(
+			packed,
+			playersData,
+			objects,
+			segments
+		)
 
 		------------------------------------------------
 		-- ROLLBACK
@@ -1585,19 +1360,37 @@ gameSnapshotEvent.OnClientEvent:Connect(
 				serverTick,
 				localTick - 1
 			do
-				applyInputsForTick(replayTick)
-				PhysicsEngine.Step(playersData, sortedUserIds, objects, segments, broadphase, currentMap.gameplay, kickableObjects, FIXED_DT, replayTick)
+
+				applyInputsForTick(
+					replayTick
+				)
+
+				PhysicsEngine.Step(
+					playersData,
+					sortedUserIds,
+					objects,
+					segments,
+					broadphase,
+					currentMap.gameplay,
+					kickableObjects,
+					FIXED_DT,
+					replayTick
+				)
 			end
 
 		else
-			localTick = serverTick
+
+			localTick =
+				serverTick
 		end
 
 		------------------------------------------------
 		-- LIMPAR INPUTS ANTIGOS
 		------------------------------------------------
 
-		localInputBuffer:clearBefore(serverTick - 10)
+		localInputBuffer:clearBefore(
+			serverTick - 10
+		)
 	end
 )
 
@@ -1644,31 +1437,53 @@ RunService.Heartbeat:Connect(
 			local inputData:
 				InputBuffer.InputData = {
 
-					moveX = currentMoveVector.X,
+					moveX =
+					currentMoveVector.X,
 
-					moveY = currentMoveVector.Y,
+					moveY =
+					currentMoveVector.Y,
 
-					kick = currentIsKicking
+					kick =
+					currentIsKicking
 				}
 
-			localInputBuffer:setLocal(localTick, inputData)
+			localInputBuffer:setLocal(
+				localTick,
+				inputData
+			)
 
-			applyInputsForTick(localTick)
+			applyInputsForTick(
+				localTick
+			)
 
-			PhysicsEngine.Step(playersData, sortedUserIds, objects, segments, broadphase, currentMap.gameplay, kickableObjects, FIXED_DT, localTick)
+			PhysicsEngine.Step(
+				playersData,
+				sortedUserIds,
+				objects,
+				segments,
+				broadphase,
+				currentMap.gameplay,
+				kickableObjects,
+				FIXED_DT,
+				localTick
+			)
 
-			localTick += 1
+			localTick +=
+				1
 
-			accumulator -= FIXED_DT
+			accumulator -=
+				FIXED_DT
 		end
 
 		------------------------------------------------
 		-- ENVIO DE INPUT
 		------------------------------------------------
 
-		local moveX = currentMoveVector.X
+		local moveX =
+			currentMoveVector.X
 
-		local moveY = currentMoveVector.Y
+		local moveY =
+			currentMoveVector.Y
 
 		if
 			moveX ~= lastSentMoveX
@@ -1677,13 +1492,20 @@ RunService.Heartbeat:Connect(
 			~= lastSentKickState
 		then
 
-			lastSentMoveX = moveX
+			lastSentMoveX =
+				moveX
 
-			lastSentMoveY = moveY
+			lastSentMoveY =
+				moveY
 
-			lastSentKickState = currentIsKicking
+			lastSentKickState =
+				currentIsKicking
 
-			gameInputEvent:FireServer(localTick, currentMoveVector, currentIsKicking)
+			gameInputEvent:FireServer(
+				localTick,
+				currentMoveVector,
+				currentIsKicking
+			)
 		end
 	end
 )
