@@ -210,7 +210,7 @@ function GameState.snapshot(
 				isKicking = p.isKicking or false,
 				lastKickTick = p.lastKickTick or -9999,
 
-				team = p.team or "Red",
+				team = p.team or "Team1",
 
 				aX = a.X,
 				aY = a.Y,
@@ -236,7 +236,7 @@ function GameState.snapshot(
 				isKicking = p.isKicking or false,
 				lastKickTick = p.lastKickTick or -9999,
 
-				team = p.team or "Red",
+				team = p.team or "Team1",
 
 				aX = nil,
 				aY = nil,
@@ -597,7 +597,7 @@ function GameState.packLiveState(
 				p.lastKickTick or -9999,
 
 				-- [10] = team
-				p.team == "Red" and 1 or 2,
+				p.team == "Team1" and 1 or 2,
 
 				-- [11] = tipo geométrico
 				getPlayerKindCode(kind),
@@ -755,7 +755,7 @@ function GameState.packForNetwork(
 
 				p.lastKickTick,
 
-				p.team == "Red" and 1 or 2,
+				p.team == "Team1" and 1 or 2,
 
 				getPlayerKindCode(
 					p.kind
@@ -1054,8 +1054,8 @@ function GameState.unpackFromNetwork(
 
 			team =
 				pArr[10] == 1
-				and "Red"
-				or "Blue",
+				and "Team1"
+				or "Team2",
 
 			aX = pArr[12],
 			aY = pArr[13],
