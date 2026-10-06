@@ -743,29 +743,20 @@ local dynamicObjects:
 	{[string]: any} = {}
 
 for _, object in ipairs(shapes) do
-
 	if object.isStatic == false then
-
-		dynamicObjects[object.id] =
-			object
+		dynamicObjects[object.id] = object
 	end
 end
 
 for _, object in ipairs(discs) do
-
 	if object.isStatic == false then
-
-		dynamicObjects[object.id] =
-			object
+		dynamicObjects[object.id] = object
 	end
 end
 
 for _, object in ipairs(segments) do
-
 	if object.isStatic == false then
-
-		dynamicObjects[object.id] =
-			object
+		dynamicObjects[object.id] = object
 	end
 end
 
@@ -777,29 +768,20 @@ local objectsById:
 	{[string]: any} = {}
 
 for _, object in ipairs(discs) do
-
 	if object.id then
-
-		objectsById[object.id] =
-			object
+		objectsById[object.id] = object
 	end
 end
 
 for _, object in ipairs(segments) do
-
 	if object.id then
-
-		objectsById[object.id] =
-			object
+		objectsById[object.id] = object
 	end
 end
 
 for _, object in ipairs(shapes) do
-
 	if object.id then
-
-		objectsById[object.id] =
-			object
+		objectsById[object.id] = object
 	end
 end
 
@@ -814,14 +796,11 @@ local kickableIds =
 	currentMap.gameplay.kickable
 
 if kickableIds then
-
 	for _, id in ipairs(kickableIds) do
-
 		local object =
 			objectsById[id]
 
 		if object then
-
 			kickableObjects[#kickableObjects + 1] =
 				object
 		end
@@ -835,9 +814,7 @@ end
 local collisionDiscs = {}
 
 for _, d in ipairs(discs) do
-
 	if d.isSolid ~= false then
-
 		collisionDiscs[#collisionDiscs + 1] =
 			d
 	end
@@ -846,9 +823,7 @@ end
 local collisionSegments = {}
 
 for _, seg in ipairs(segments) do
-
 	if seg.isSolid ~= false then
-
 		collisionSegments[#collisionSegments + 1] =
 			seg
 	end
@@ -857,9 +832,7 @@ end
 local collisionShapes = {}
 
 for _, s in ipairs(shapes) do
-
 	if s.isSolid ~= false then
-
 		collisionShapes[#collisionShapes + 1] =
 			s
 	end
