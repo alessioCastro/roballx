@@ -35,7 +35,7 @@ export type InputData = {
 }
 
 export type PlayerSnapshot = {
-	kind: "disc" | "shape" | "segment",
+	kind: "object" | "segment",
 
 	posX: number,
 	posY: number,
@@ -57,7 +57,7 @@ export type PlayerSnapshot = {
 	bY: number?,
 }
 
-export type DiscSnapshot = {
+export type ObjectSnapshot = {
 	id: string,
 
 	posX: number,
@@ -86,27 +86,13 @@ export type SegmentSnapshot = {
 	angularVelocity: number,
 }
 
-export type ShapeSnapshot = {
-	id: string,
-
-	posX: number,
-	posY: number,
-
-	velX: number,
-	velY: number,
-
-	rotation: number,
-	angularVelocity: number,
-}
-
 export type WorldSnapshot = {
 	tick: number,
 
 	players: { [number]: PlayerSnapshot },
 
-	discs: { DiscSnapshot },
+	objects: { ObjectSnapshot },
 	segments: { SegmentSnapshot },
-	shapes: { ShapeSnapshot },
 
 	scoreRed: number,
 	scoreBlue: number,
@@ -118,12 +104,10 @@ export type WorldSnapshot = {
 ----------------------------------------------------
 
 local function getPlayerKindCode(
-	kind: "disc" | "shape" | "segment"
+	kind: "object" | "segment"
 ): number
-	if kind == "shape" then
+	if kind == "segment" then
 		return 2
-	elseif kind == "segment" then
-		return 3
 	end
 
 	return 1
@@ -131,14 +115,12 @@ end
 
 local function getPlayerKindFromCode(
 	code: number?
-): "disc" | "shape" | "segment"
+): "object" | "segment"
 	if code == 2 then
-		return "shape"
-	elseif code == 3 then
 		return "segment"
 	end
 
-	return "disc"
+	return "object"
 end
 
 ----------------------------------------------------
@@ -148,9 +130,8 @@ end
 function GameState.snapshot(
 	tick: number,
 	playersData: { [number]: any },
-	discs: { any },
+	objects: { any },
 	segments: { any },
-	shapes: { any },
 	scoreRed: number,
 	scoreBlue: number,
 	resetCountdown: number
@@ -161,9 +142,8 @@ function GameState.snapshot(
 
 		players = {},
 
-		discs = {},
+		objects = {},
 		segments = {},
-		shapes = {},
 
 		scoreRed = scoreRed,
 		scoreBlue = scoreBlue,
@@ -177,7 +157,7 @@ function GameState.snapshot(
 	for uId, p in pairs(playersData) do
 		local kind =
 			p.kind
-			or "disc"
+			or "object"
 
 		local vel =
 			p.vel
@@ -247,32 +227,32 @@ function GameState.snapshot(
 	end
 
 	------------------------------------------------
-	-- DISCS DINÂMICOS
+	-- OBJETOS DINÂMICOS
 	------------------------------------------------
 
-	for _, d in ipairs(discs) do
-		if not d.isStatic then
+	for _, object in ipairs(objects) do
+		if not object.isStatic then
 			local vel =
-				d.vel
+				object.vel
 				or Vector2.zero
 
-			snap.discs[#snap.discs + 1] = {
-				id = d.id,
+			snap.objects[#snap.objects + 1] = {
+				id = object.id,
 
-				posX = d.pos.X,
-				posY = d.pos.Y,
+				posX = object.pos.X,
+				posY = object.pos.Y,
 
 				velX = vel.X,
 				velY = vel.Y,
 
-				rotation = d.rotation or 0,
-				angularVelocity = d.angularVelocity or 0,
+				rotation = object.rotation or 0,
+				angularVelocity = object.angularVelocity or 0,
 			}
 		end
 	end
 
 	------------------------------------------------
-	-- SEGMENTS DINÂMICOS
+	-- SEGMENTOS DINÂMICOS
 	------------------------------------------------
 
 	for _, seg in ipairs(segments) do
@@ -299,31 +279,6 @@ function GameState.snapshot(
 		end
 	end
 
-	------------------------------------------------
-	-- SHAPES DINÂMICOS
-	------------------------------------------------
-
-	for _, s in ipairs(shapes) do
-		if not s.isStatic then
-			local vel =
-				s.vel
-				or Vector2.zero
-
-			snap.shapes[#snap.shapes + 1] = {
-				id = s.id,
-
-				posX = s.pos.X,
-				posY = s.pos.Y,
-
-				velX = vel.X,
-				velY = vel.Y,
-
-				rotation = s.rotation or 0,
-				angularVelocity = s.angularVelocity or 0,
-			}
-		end
-	end
-
 	return snap
 end
 
@@ -334,9 +289,8 @@ end
 function GameState.restore(
 	snap: WorldSnapshot,
 	playersData: { [number]: any },
-	discs: { any },
+	objects: { any },
 	segments: { any },
-	shapes: { any },
 	matchManager: any?
 )
 	if matchManager then
@@ -402,102 +356,70 @@ function GameState.restore(
 	end
 
 	------------------------------------------------
-	-- DISCS
+	-- OBJETOS
 	------------------------------------------------
 
-	if #snap.discs > 0 then
-		local discMap =
-			getObjectMap(discs)
+	if #snap.objects > 0 then
+		local objectMap =
+			getObjectMap(objects)
 
-		for _, dSnap in ipairs(snap.discs) do
-			local d =
-				discMap[dSnap.id]
+		for _, objectSnap in ipairs(snap.objects) do
+			local object =
+				objectMap[objectSnap.id]
 
-			if d then
-				d.pos = Vector2.new(
-					dSnap.posX,
-					dSnap.posY
+			if object then
+				object.pos = Vector2.new(
+					objectSnap.posX,
+					objectSnap.posY
 				)
 
-				d.vel = Vector2.new(
-					dSnap.velX,
-					dSnap.velY
+				object.vel = Vector2.new(
+					objectSnap.velX,
+					objectSnap.velY
 				)
 
-				d.rotation =
-					dSnap.rotation
+				object.rotation =
+					objectSnap.rotation
 
-				d.angularVelocity =
-					dSnap.angularVelocity
+				object.angularVelocity =
+					objectSnap.angularVelocity
 			end
 		end
 	end
 
 	------------------------------------------------
-	-- SEGMENTS
+	-- SEGMENTOS
 	------------------------------------------------
 
 	if #snap.segments > 0 then
 		local segmentMap =
 			getObjectMap(segments)
 
-		for _, sSnap in ipairs(snap.segments) do
+		for _, segmentSnap in ipairs(snap.segments) do
 			local seg =
-				segmentMap[sSnap.id]
+				segmentMap[segmentSnap.id]
 
 			if seg then
 				seg.a = Vector2.new(
-					sSnap.aX,
-					sSnap.aY
+					segmentSnap.aX,
+					segmentSnap.aY
 				)
 
 				seg.b = Vector2.new(
-					sSnap.bX,
-					sSnap.bY
+					segmentSnap.bX,
+					segmentSnap.bY
 				)
 
 				seg.vel = Vector2.new(
-					sSnap.velX,
-					sSnap.velY
+					segmentSnap.velX,
+					segmentSnap.velY
 				)
 
 				seg.rotation =
-					sSnap.rotation
+					segmentSnap.rotation
 
 				seg.angularVelocity =
-					sSnap.angularVelocity
-			end
-		end
-	end
-
-	------------------------------------------------
-	-- SHAPES
-	------------------------------------------------
-
-	if #snap.shapes > 0 then
-		local shapeMap =
-			getObjectMap(shapes)
-
-		for _, sSnap in ipairs(snap.shapes) do
-			local s =
-				shapeMap[sSnap.id]
-
-			if s then
-				s.pos = Vector2.new(
-					sSnap.posX,
-					sSnap.posY
-				)
-
-				s.vel = Vector2.new(
-					sSnap.velX,
-					sSnap.velY
-				)
-
-				s.rotation =
-					sSnap.rotation
-
-				s.angularVelocity =
-					sSnap.angularVelocity
+					segmentSnap.angularVelocity
 			end
 		end
 	end
@@ -510,9 +432,8 @@ end
 function GameState.packLiveState(
 	tick: number,
 	playersData: { [number]: any },
-	discs: { any },
+	objects: { any },
 	segments: { any },
-	shapes: { any },
 	scoreRed: number,
 	scoreBlue: number,
 	resetCountdown: number,
@@ -543,7 +464,7 @@ function GameState.packLiveState(
 
 			local kind =
 				p.kind
-				or "disc"
+				or "object"
 
 			local posX
 			local posY
@@ -578,35 +499,26 @@ function GameState.packLiveState(
 			playersArr[#playersArr + 1] = {
 				uId,
 
-				-- [2],[3] = posição/centro
 				posX,
 				posY,
 
-				-- [4],[5] = velocidade
 				p.vel.X,
 				p.vel.Y,
 
-				-- [6],[7] = input
 				input.X,
 				input.Y,
 
-				-- [8] = kick
 				p.isKicking and 1 or 0,
 
-				-- [9] = último tick de kick
 				p.lastKickTick or -9999,
 
-				-- [10] = team
 				p.team == "Team1" and 1 or 2,
 
-				-- [11] = tipo geométrico
 				getPlayerKindCode(kind),
 
-				-- [12],[13] = A
 				aX,
 				aY,
 
-				-- [14],[15] = B
 				bX,
 				bY,
 			}
@@ -616,61 +528,34 @@ function GameState.packLiveState(
 	packed[5] = playersArr
 
 	------------------------------------------------
-	-- SHAPES DINÂMICOS
+	-- OBJETOS DINÂMICOS
 	------------------------------------------------
 
-	local dynShapes = {}
+	local dynObjects = {}
 
-	for _, s in ipairs(shapes) do
+	for _, object in ipairs(objects) do
 		local vel =
-			s.vel
+			object.vel
 			or Vector2.zero
 
-		dynShapes[#dynShapes + 1] = {
-			s.id,
+		dynObjects[#dynObjects + 1] = {
+			object.id,
 
-			s.pos.X,
-			s.pos.Y,
+			object.pos.X,
+			object.pos.Y,
 
 			vel.X,
 			vel.Y,
 
-			s.rotation or 0,
-			s.angularVelocity or 0,
+			object.rotation or 0,
+			object.angularVelocity or 0,
 		}
 	end
 
-	packed[6] = dynShapes
+	packed[6] = dynObjects
 
 	------------------------------------------------
-	-- DISCS DINÂMICOS
-	------------------------------------------------
-
-	local dynDiscs = {}
-
-	for _, d in ipairs(discs) do
-		local vel =
-			d.vel
-			or Vector2.zero
-
-		dynDiscs[#dynDiscs + 1] = {
-			d.id,
-
-			d.pos.X,
-			d.pos.Y,
-
-			vel.X,
-			vel.Y,
-
-			d.rotation or 0,
-			d.angularVelocity or 0,
-		}
-	end
-
-	packed[7] = dynDiscs
-
-	------------------------------------------------
-	-- SEGMENTS DINÂMICOS
+	-- SEGMENTOS DINÂMICOS
 	------------------------------------------------
 
 	local dynSegs = {}
@@ -697,7 +582,7 @@ function GameState.packLiveState(
 		}
 	end
 
-	packed[8] = dynSegs
+	packed[7] = dynSegs
 
 	return packed
 end
@@ -773,53 +658,30 @@ function GameState.packForNetwork(
 	packed[5] = playersArr
 
 	------------------------------------------------
-	-- SHAPES
+	-- OBJETOS
 	------------------------------------------------
 
-	local dynShapes = {}
+	local dynObjects = {}
 
-	for _, s in ipairs(snap.shapes) do
-		dynShapes[#dynShapes + 1] = {
-			s.id,
+	for _, object in ipairs(snap.objects) do
+		dynObjects[#dynObjects + 1] = {
+			object.id,
 
-			s.posX,
-			s.posY,
+			object.posX,
+			object.posY,
 
-			s.velX,
-			s.velY,
+			object.velX,
+			object.velY,
 
-			s.rotation or 0,
-			s.angularVelocity or 0,
+			object.rotation or 0,
+			object.angularVelocity or 0,
 		}
 	end
 
-	packed[6] = dynShapes
+	packed[6] = dynObjects
 
 	------------------------------------------------
-	-- DISCS
-	------------------------------------------------
-
-	local dynDiscs = {}
-
-	for _, d in ipairs(snap.discs) do
-		dynDiscs[#dynDiscs + 1] = {
-			d.id,
-
-			d.posX,
-			d.posY,
-
-			d.velX,
-			d.velY,
-
-			d.rotation or 0,
-			d.angularVelocity or 0,
-		}
-	end
-
-	packed[7] = dynDiscs
-
-	------------------------------------------------
-	-- SEGMENTS
+	-- SEGMENTOS
 	------------------------------------------------
 
 	local dynSegs = {}
@@ -842,7 +704,7 @@ function GameState.packForNetwork(
 		}
 	end
 
-	packed[8] = dynSegs
+	packed[7] = dynSegs
 
 	return packed
 end
@@ -854,9 +716,8 @@ end
 function GameState.restorePacked(
 	packed: any,
 	playersData: { [number]: any },
-	discs: { any },
-	segments: { any },
-	shapes: { any }
+	objects: { any },
+	segments: { any }
 )
 	------------------------------------------------
 	-- PLAYERS
@@ -910,73 +771,43 @@ function GameState.restorePacked(
 	end
 
 	------------------------------------------------
-	-- SHAPES
+	-- OBJETOS
 	------------------------------------------------
 
-	local shapeMap =
-		getObjectMap(shapes)
+	local objectMap =
+		getObjectMap(objects)
 
-	for _, sArr in ipairs(packed[6]) do
-		local shape =
-			shapeMap[sArr[1]]
+	for _, objectArr in ipairs(packed[6]) do
+		local object =
+			objectMap[objectArr[1]]
 
-		if shape then
-			shape.pos = Vector2.new(
-				sArr[2],
-				sArr[3]
+		if object then
+			object.pos = Vector2.new(
+				objectArr[2],
+				objectArr[3]
 			)
 
-			shape.vel = Vector2.new(
-				sArr[4],
-				sArr[5]
+			object.vel = Vector2.new(
+				objectArr[4],
+				objectArr[5]
 			)
 
-			shape.rotation =
-				sArr[6]
+			object.rotation =
+				objectArr[6]
 
-			shape.angularVelocity =
-				sArr[7]
+			object.angularVelocity =
+				objectArr[7]
 		end
 	end
 
 	------------------------------------------------
-	-- DISCS
-	------------------------------------------------
-
-	local discMap =
-		getObjectMap(discs)
-
-	for _, dArr in ipairs(packed[7]) do
-		local disc =
-			discMap[dArr[1]]
-
-		if disc then
-			disc.pos = Vector2.new(
-				dArr[2],
-				dArr[3]
-			)
-
-			disc.vel = Vector2.new(
-				dArr[4],
-				dArr[5]
-			)
-
-			disc.rotation =
-				dArr[6]
-
-			disc.angularVelocity =
-				dArr[7]
-		end
-	end
-
-	------------------------------------------------
-	-- SEGMENTS
+	-- SEGMENTOS
 	------------------------------------------------
 
 	local segmentMap =
 		getObjectMap(segments)
 
-	for _, segArr in ipairs(packed[8]) do
+	for _, segArr in ipairs(packed[7]) do
 		local segment =
 			segmentMap[segArr[1]]
 
@@ -1018,9 +849,8 @@ function GameState.unpackFromNetwork(
 
 		players = {},
 
-		discs = {},
+		objects = {},
 		segments = {},
-		shapes = {},
 
 		scoreRed = packed[2],
 		scoreBlue = packed[3],
@@ -1066,48 +896,29 @@ function GameState.unpackFromNetwork(
 	end
 
 	------------------------------------------------
-	-- SHAPES
+	-- OBJETOS
 	------------------------------------------------
 
-	for _, sArr in ipairs(packed[6]) do
-		snap.shapes[#snap.shapes + 1] = {
-			id = sArr[1],
+	for _, objectArr in ipairs(packed[6]) do
+		snap.objects[#snap.objects + 1] = {
+			id = objectArr[1],
 
-			posX = sArr[2],
-			posY = sArr[3],
+			posX = objectArr[2],
+			posY = objectArr[3],
 
-			velX = sArr[4],
-			velY = sArr[5],
+			velX = objectArr[4],
+			velY = objectArr[5],
 
-			rotation = sArr[6] or 0,
-			angularVelocity = sArr[7] or 0,
+			rotation = objectArr[6] or 0,
+			angularVelocity = objectArr[7] or 0,
 		}
 	end
 
 	------------------------------------------------
-	-- DISCS
+	-- SEGMENTOS
 	------------------------------------------------
 
-	for _, dArr in ipairs(packed[7]) do
-		snap.discs[#snap.discs + 1] = {
-			id = dArr[1],
-
-			posX = dArr[2],
-			posY = dArr[3],
-
-			velX = dArr[4],
-			velY = dArr[5],
-
-			rotation = dArr[6] or 0,
-			angularVelocity = dArr[7] or 0,
-		}
-	end
-
-	------------------------------------------------
-	-- SEGMENTS
-	------------------------------------------------
-
-	for _, segArr in ipairs(packed[8]) do
+	for _, segArr in ipairs(packed[7]) do
 		snap.segments[#snap.segments + 1] = {
 			id = segArr[1],
 
