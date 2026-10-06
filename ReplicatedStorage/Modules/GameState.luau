@@ -534,22 +534,24 @@ function GameState.packLiveState(
 	local dynObjects = {}
 
 	for _, object in ipairs(objects) do
-		local vel =
-			object.vel
-			or Vector2.zero
+		if not object.isStatic then
+			local vel =
+				object.vel
+				or Vector2.zero
 
-		dynObjects[#dynObjects + 1] = {
-			object.id,
+			dynObjects[#dynObjects + 1] = {
+				object.id,
 
-			object.pos.X,
-			object.pos.Y,
+				object.pos.X,
+				object.pos.Y,
 
-			vel.X,
-			vel.Y,
+				vel.X,
+				vel.Y,
 
-			object.rotation or 0,
-			object.angularVelocity or 0,
-		}
+				object.rotation or 0,
+				object.angularVelocity or 0,
+			}
+		end
 	end
 
 	packed[6] = dynObjects
@@ -561,25 +563,27 @@ function GameState.packLiveState(
 	local dynSegs = {}
 
 	for _, seg in ipairs(segments) do
-		local vel =
-			seg.vel
-			or Vector2.zero
+		if not seg.isStatic then
+			local vel =
+				seg.vel
+				or Vector2.zero
 
-		dynSegs[#dynSegs + 1] = {
-			seg.id,
+			dynSegs[#dynSegs + 1] = {
+				seg.id,
 
-			seg.a.X,
-			seg.a.Y,
+				seg.a.X,
+				seg.a.Y,
 
-			seg.b.X,
-			seg.b.Y,
+				seg.b.X,
+				seg.b.Y,
 
-			vel.X,
-			vel.Y,
+				vel.X,
+				vel.Y,
 
-			seg.rotation or 0,
-			seg.angularVelocity or 0,
-		}
+				seg.rotation or 0,
+				seg.angularVelocity or 0,
+			}
+		end
 	end
 
 	packed[7] = dynSegs
