@@ -331,36 +331,38 @@ function MatchManager.CheckGoals(
 	end
 
 	for _, goal in ipairs(scoring) do
-		local object =
-			findObject(
-				goal.object,
-				discs,
-				segments,
-				shapes
-			)
+		for _, objectId in ipairs(goal.objects) do
+			local object =
+				findObject(
+					objectId,
+					discs,
+					segments,
+					shapes
+				)
 
-		if object then
-			local objectCenter =
-				getObjectCenter(object)
+			if object then
+				local objectCenter =
+					getObjectCenter(object)
 
-			if objectCenter then
-				if objectCenter.X >= goal.min.X
-					and objectCenter.X <= goal.max.X
-					and objectCenter.Y >= goal.min.Y
-					and objectCenter.Y <= goal.max.Y
-				then
+				if objectCenter then
+					if objectCenter.X >= goal.min.X
+						and objectCenter.X <= goal.max.X
+						and objectCenter.Y >= goal.min.Y
+						and objectCenter.Y <= goal.max.Y
+					then
 
-					if goal.team == "Red" then
-						scoreRed += 1
+						if goal.team == "Team1" then
+							scoreRed += 1
 
-					elseif goal.team == "Blue" then
-						scoreBlue += 1
+						elseif goal.team == "Team2" then
+							scoreBlue += 1
+						end
+
+						resetCountdown =
+							RESET_DELAY_TICKS
+
+						return true
 					end
-
-					resetCountdown =
-						RESET_DELAY_TICKS
-
-					return true
 				end
 			end
 		end
@@ -402,7 +404,7 @@ function MatchManager.ResetPositions(
 
 			local spawnPositions
 
-			if pData.team == "Red" then
+			if pData.team == "Team1" then
 				spawnPositions =
 					playerGameplay.spawn.team1Positions
 			else
