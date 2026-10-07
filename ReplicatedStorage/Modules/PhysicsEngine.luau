@@ -2789,32 +2789,18 @@ function PhysicsEngine.Step(
 	end
 
 	------------------------------------------------
-	-- SUBSTEPS
+	-- FIXED SUBSTEPS
 	------------------------------------------------
 
-	-- Determine the number of substeps from the
-	-- fastest dynamic object. Objects are integrated
-	-- exactly once per tick, distributed across
-	-- these substeps.
-	local maxSpeed = 0
-
-	for _, object in ipairs(objects) do
-		if object.isStatic ~= true then
-			local speed =
-				(object.vel or Vector2.zero).Magnitude
-
-			if speed > maxSpeed then
-				maxSpeed = speed
-			end
-		end
-	end
-
-	local steps =
-		math.clamp(
-			math.ceil(maxSpeed / 6),
-			1,
-			4
-		)
+	-- Mantém o custo do solver estável.
+	--
+	-- Antes, a quantidade de substeps dependia
+	-- da velocidade máxima dos objetos e podia
+	-- variar entre 1 e 4 durante a partida.
+	--
+	-- Agora cada tick possui sempre exatamente
+	-- 2 substeps.
+	local steps = 2
 
 	local subDt =
 		fixedDt / steps
