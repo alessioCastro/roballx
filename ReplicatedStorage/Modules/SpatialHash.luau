@@ -41,6 +41,7 @@ export type Grid = {
 	cellSize: number,
 	cells: {[number]: {[number]: {Entry}}},
 	entries: {Entry},
+	queryBuffer: {Entry},
 }
 
 function SpatialHash.new(cellSize: number): Grid
@@ -53,6 +54,7 @@ function SpatialHash.new(cellSize: number): Grid
 		cellSize = cellSize,
 		cells = {},
 		entries = {},
+		queryBuffer = {},
 	}
 end
 
@@ -61,20 +63,6 @@ local function getCellCoordinate(
 	cellSize: number
 ): number
 	return math.floor(value / cellSize)
-end
-
-local function getCell(
-	grid: Grid,
-	cellX: number,
-	cellY: number
-): {Entry}?
-	local column = grid.cells[cellX]
-
-	if column then
-		return column[cellY]
-	end
-
-	return nil
 end
 
 local function getOrCreateCell(
@@ -161,7 +149,8 @@ function SpatialHash.insert(
 			local cellIndex =
 				#cell + 1
 
-			cell[cellIndex] = entry
+			cell[cellIndex] =
+				entry
 
 			entry.cells[#entry.cells + 1] = {
 				x = cellX,
@@ -287,8 +276,7 @@ function SpatialHash.update(
 			grid.cellSize
 		)
 
-	-- Continua nas mesmas células:
-	-- não precisa remover/reinserir.
+	-- Continua nas mesmas células.
 	if
 		entry.minCellX == minCellX
 		and entry.maxCellX == maxCellX
@@ -300,23 +288,153 @@ function SpatialHash.update(
 		return entry
 	end
 
-	local object =
-		entry.object
+	------------------------------------------------
+	-- O objeto mudou de célula.
+	--
+	-- Reutilizamos a mesma Entry e as mesmas
+	-- CellReferences sempre que possível.
+	-- Isso evita remove() + insert() completos.
+	------------------------------------------------
 
-	local index =
-		entry.index
+	local cellReferences =
+		entry.cells
 
-	SpatialHash.remove(
-		grid,
-		entry
-	)
+	local oldCellCount =
+		#cellReferences
 
-	return SpatialHash.insert(
-		grid,
-		object,
-		aabb,
-		index
-	)
+	------------------------------------------------
+	-- REMOVE DAS CÉLULAS ANTIGAS
+	------------------------------------------------
+
+	for referenceIndex = 1, oldCellCount do
+		local cellReference =
+			cellReferences[referenceIndex]
+
+		local column =
+			grid.cells[cellReference.x]
+
+		local cell =
+			column
+			and column[cellReference.y]
+
+		if cell then
+			local cellIndex =
+				cellReference.index
+
+			local lastIndex =
+				#cell
+
+			if cellIndex <= lastIndex then
+				local lastEntry =
+					cell[lastIndex]
+
+				if cellIndex ~= lastIndex then
+					cell[cellIndex] =
+						lastEntry
+
+					for _, lastCellReference in
+						ipairs(lastEntry.cells)
+					do
+						if
+							lastCellReference.x
+							== cellReference.x
+							and lastCellReference.y
+							== cellReference.y
+							and lastCellReference.index
+							== lastIndex
+						then
+							lastCellReference.index =
+								cellIndex
+
+							break
+						end
+					end
+				end
+
+				cell[lastIndex] = nil
+			end
+
+			if #cell == 0 then
+				column[cellReference.y] = nil
+			end
+
+			if next(column) == nil then
+				grid.cells[cellReference.x] = nil
+			end
+		end
+	end
+
+	------------------------------------------------
+	-- ADICIONA ÀS NOVAS CÉLULAS
+	------------------------------------------------
+
+	local newCellCount = 0
+
+	for cellX = minCellX, maxCellX do
+		for cellY = minCellY, maxCellY do
+			local cell =
+				getOrCreateCell(
+					grid,
+					cellX,
+					cellY
+				)
+
+			local cellIndex =
+				#cell + 1
+
+			cell[cellIndex] =
+				entry
+
+			newCellCount += 1
+
+			local cellReference =
+				cellReferences[newCellCount]
+
+			if not cellReference then
+				cellReference = {
+					x = cellX,
+					y = cellY,
+					index = cellIndex,
+				}
+
+				cellReferences[newCellCount] =
+					cellReference
+			else
+				cellReference.x =
+					cellX
+
+				cellReference.y =
+					cellY
+
+				cellReference.index =
+					cellIndex
+			end
+		end
+	end
+
+	-- Se a nova AABB ocupa menos células,
+	-- descarta apenas as referências excedentes.
+	for index = newCellCount + 1, oldCellCount do
+		cellReferences[index] =
+			nil
+	end
+
+	entry.aabb =
+		aabb
+
+	entry.minCellX =
+		minCellX
+
+	entry.maxCellX =
+		maxCellX
+
+	entry.minCellY =
+		minCellY
+
+	entry.maxCellY =
+		maxCellY
+
+	return entry
 end
 
 local function beginQuery(): number
@@ -394,7 +512,10 @@ function SpatialHash.query(
 			grid.cellSize
 		)
 
-	local entries = {}
+	local entries =
+		grid.queryBuffer
+
+	table.clear(entries)
 
 	appendUnique(
 		grid,
@@ -439,7 +560,10 @@ function SpatialHash.queryCombined(
 			staticGrid.cellSize
 		)
 
-	local entries = {}
+	local entries =
+		staticGrid.queryBuffer
+
+	table.clear(entries)
 
 	local queryId =
 		beginQuery()
@@ -470,6 +594,7 @@ end
 function SpatialHash.clear(grid: Grid)
 	table.clear(grid.cells)
 	table.clear(grid.entries)
+	table.clear(grid.queryBuffer)
 end
 
 function SpatialHash.rebuild(
