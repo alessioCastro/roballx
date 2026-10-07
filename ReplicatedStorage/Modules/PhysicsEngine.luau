@@ -1056,11 +1056,15 @@ end
 
 function PhysicsEngine.resolveShapeVsShapeCollision(
 	a: Object,
-	b: Object
+	b: Object,
+	impulseFactor: number?
 )
 	if not canCollide(a, b) then
 		return
 	end
+
+	impulseFactor =
+		impulseFactor or 1
 
 	if
 		a.isSolid == false
@@ -1238,7 +1242,9 @@ function PhysicsEngine.resolveShapeVsShapeCollision(
 	if not bIsStatic then
 		b.vel =
 			(b.vel or Vector2.zero)
-			+ impulse * inverseMassB
+			+ impulse
+			* impulseFactor
+			* inverseMassB
 	end
 
 	applyAngularImpulse(
@@ -1973,7 +1979,8 @@ local function resolvePlayerVsObject(
 	if player.kind == "object" then
 		PhysicsEngine.resolveShapeVsShapeCollision(
 			playerAsObject(player) :: Object,
-			object
+			object,
+			0.1
 		)
 
 	elseif player.kind == "segment" then
@@ -2563,58 +2570,85 @@ function PhysicsEngine.tryKick(
 	local playerCenter =
 		getPlayerCenter(pData)
 
-	local playerRadius =
-		getPlayerBoundingRadius(pData)
+	local playerP1: Vector2
+	local playerP2: Vector2
+	local playerRadius: number
+
+	if pData.kind == "object" then
+		playerP1, playerP2, playerRadius =
+			getObjectCollisionSegment(
+				playerAsObject(pData) :: Object
+			)
+	else
+		playerP1, playerP2, playerRadius =
+			getPlayerSegment(pData)
+	end
 
 	for _, object in ipairs(kickableObjects) do
 		if
 			object.isStatic ~= true
 			and object.vel
 		then
-			local objectCenter: Vector2?
+			local objectP1: Vector2?
+			local objectP2: Vector2?
 			local objectRadius: number?
 
-			if object.pos and object.size then
-				objectCenter =
-					object.pos
-
-				objectRadius =
-					getObjectRadius(
+			if
+				object.pos
+				and object.segmentP1
+				and object.segmentP2
+				and object.segmentRadius
+			then
+				objectP1, objectP2, objectRadius =
+					getObjectCollisionSegment(
 						object
 					)
 
 			elseif object.a and object.b then
-				objectCenter =
-					(object.a + object.b) * 0.5
+				objectP1 =
+					object.a
+
+				objectP2 =
+					object.b
 
 				objectRadius =
-					(object.b - object.a).Magnitude
-					* 0.5
-					+ ((object.thickness or 0) * 0.5)
+					(object.thickness or 0) * 0.5
 			end
 
 			if
-				objectCenter
+				objectP1
+				and objectP2
 				and objectRadius
 			then
-				local delta =
-					objectCenter
-					- playerCenter
+				local pA, pB, dist =
+					getClosestPointsBetweenSegments(
+						playerP1,
+						playerP2,
+						objectP1,
+						objectP2
+					)
 
-				local dist =
-					delta.Magnitude
+				local surfaceDistance =
+					dist
+					- playerRadius
+					- objectRadius
 
 				if
-					dist <=
-					playerRadius
-					+ objectRadius
-					+ kickPhys.rangeExtra
+					surfaceDistance
+					<= kickPhys.rangeExtra
 				then
 					pData.lastKickTick =
 						currentTick
 
+					local objectCenter =
+						(objectP1 + objectP2) * 0.5
+
+					local delta =
+						objectCenter
+						- playerCenter
+
 					local kickDir =
-						dist > 0
+						delta.Magnitude > 0
 						and delta.Unit
 						or Vector2.new(1, 0)
 
