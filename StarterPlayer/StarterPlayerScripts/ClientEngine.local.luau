@@ -42,6 +42,8 @@ local MapRenderer =
 local HUDRenderer =
 	require(Renderers:WaitForChild("HUDRenderer"))
 
+local TeamSettings = require(replicatedModules:WaitForChild("TeamSettings"))
+
 ----------------------------------------------------
 -- SERVIDOR RESERVADO
 ----------------------------------------------------
@@ -693,6 +695,24 @@ local lastConfirmedTick =
 local accumulator =
 	0
 
+type VisualSnapshot = {
+	snapshot: GameState.WorldSnapshot,
+	objects: {[string]: GameState.ObjectSnapshot},
+	segments: {[string]: GameState.SegmentSnapshot}
+}
+
+local previousVisualSnapshot:
+	VisualSnapshot? = nil
+
+local currentVisualSnapshot:
+	VisualSnapshot? = nil
+
+local visualRenderTick =
+	0
+
+local SNAPSHOT_INTERPOLATION_TICKS =
+	2
+
 local currentMoveVector =
 	Vector2.zero
 
@@ -1043,7 +1063,8 @@ local hud =
 type PlayerRender = {
 	frame: Frame,
 	stroke: UIStroke?,
-	kind: "disc" | "segment",
+	uniformFrame: Frame?,
+	kind: "object" | "segment",
 	renderPos: Vector2?,
 	renderA: Vector2?,
 	renderB: Vector2?,
@@ -1128,18 +1149,13 @@ local function createPlayerRender(
 	pData: PhysicsEngine.PlayerObject
 ): PlayerRender
 
-	local color =
+	local teamSettings =
 		pData.team == "Team1"
-		and Color3.fromRGB(
-			220,
-			60,
-			60
-		)
-		or Color3.fromRGB(
-			60,
-			120,
-			220
-		)
+		and TeamSettings.teams.Team1
+		or TeamSettings.teams.Team2
+
+	local color =
+		teamSettings.uniform.base.color
 
 	------------------------------------------------
 	-- OBJECT
@@ -1181,6 +1197,176 @@ local function createPlayerRender(
 				}
 			)
 
+		------------------------------------------------
+		-- CONTAINER DA UNIFORME
+		------------------------------------------------
+
+		local uniformFrame =
+			Instance.new("Frame")
+
+		uniformFrame.Name =
+			"Uniform"
+
+		uniformFrame.Size =
+			UDim2.fromScale(
+				1,
+				1
+			)
+
+		uniformFrame.Position =
+			UDim2.fromScale(
+				0,
+				0
+			)
+
+		uniformFrame.BackgroundTransparency =
+			1
+
+		uniformFrame.BorderSizePixel =
+			0
+
+		uniformFrame.ClipsDescendants =
+			true
+
+		uniformFrame.ZIndex =
+			frame.ZIndex + 1
+
+		uniformFrame.Parent =
+			frame
+
+		------------------------------------------------
+		-- CAMADAS DA UNIFORME
+		------------------------------------------------
+
+		local layers =
+			teamSettings.uniform.layers
+
+		for index, layer in ipairs(layers) do
+
+			local element
+
+			------------------------------------------------
+			-- FRAME
+			------------------------------------------------
+
+			if layer.type == "frame" then
+
+				local frameLayer =
+					Instance.new("Frame")
+
+				frameLayer.Name =
+					"Layer_" .. tostring(index)
+
+				frameLayer.BackgroundColor3 =
+					layer.color
+					or Color3.new(
+						1,
+						1,
+						1
+					)
+
+				frameLayer.BackgroundTransparency =
+					layer.transparency
+					or 0
+
+				frameLayer.BorderSizePixel =
+					0
+
+				element =
+					frameLayer
+
+			------------------------------------------------
+			-- IMAGE
+			------------------------------------------------
+
+			elseif layer.type == "image" then
+
+				local imageLayer =
+					Instance.new("ImageLabel")
+
+				imageLayer.Name =
+					"Layer_" .. tostring(index)
+
+				imageLayer.Image =
+					layer.image
+					or ""
+
+				imageLayer.ImageTransparency =
+					layer.transparency
+					or 0
+
+				imageLayer.BackgroundTransparency =
+					1
+
+				imageLayer.BorderSizePixel =
+					0
+
+				imageLayer.ScaleType =
+					Enum.ScaleType.Stretch
+
+				element =
+					imageLayer
+			end
+
+			------------------------------------------------
+			-- CONFIGURAÇÃO DA CAMADA
+			------------------------------------------------
+
+			if element then
+
+				element.AnchorPoint =
+					Vector2.new(
+						0.5,
+						0.5
+					)
+
+				element.Position =
+					UDim2.fromScale(
+						(
+							layer.position
+							and layer.position.x
+						)
+						or 0.5,
+
+						(
+							layer.position
+							and layer.position.y
+						)
+						or 0.5
+					)
+
+				element.Size =
+					UDim2.fromScale(
+						(
+							layer.size
+							and layer.size.x
+						)
+						or 1,
+
+						(
+							layer.size
+							and layer.size.y
+						)
+						or 1
+					)
+
+				element.Rotation =
+					layer.rotation
+					or 0
+
+				element.ZIndex =
+					uniformFrame.ZIndex
+					+ index
+
+				element.Parent =
+					uniformFrame
+			end
+		end
+
+		------------------------------------------------
+		-- PLAYER RENDER
+		------------------------------------------------
+
 		return {
 
 			frame =
@@ -1188,6 +1374,9 @@ local function createPlayerRender(
 
 			stroke =
 				stroke,
+
+			uniformFrame =
+				uniformFrame,
 
 			kind =
 				"object",
@@ -1202,7 +1391,8 @@ local function createPlayerRender(
 				nil,
 
 			lastKicking =
-				pData.isKicking or false
+				pData.isKicking
+				or false
 		}
 	end
 
@@ -1233,6 +1423,9 @@ local function createPlayerRender(
 		stroke =
 			nil,
 
+		uniformFrame =
+			nil,
+
 		kind =
 			"segment",
 
@@ -1246,7 +1439,8 @@ local function createPlayerRender(
 			pData.b,
 
 		lastKicking =
-			pData.isKicking or false
+			pData.isKicking
+			or false
 	}
 end
 
@@ -1268,6 +1462,27 @@ gameSnapshotEvent.OnClientEvent:Connect(
 
 		lastConfirmedTick =
 			serverTick
+
+		local snapshot =
+			GameState.unpackFromNetwork(
+				packed
+			)
+
+		local visualSnapshot =
+			getVisualSnapshot(
+				snapshot
+			)
+
+		previousVisualSnapshot =
+			currentVisualSnapshot
+				or visualSnapshot
+
+		currentVisualSnapshot =
+			visualSnapshot
+
+		visualRenderTick =
+			serverTick
+				- SNAPSHOT_INTERPOLATION_TICKS
 
 		------------------------------------------------
 		-- HUD
@@ -1520,6 +1735,73 @@ local function worldToGui(
 	)
 end
 
+local function getVisualSnapshot(
+	snapshot: GameState.WorldSnapshot
+): VisualSnapshot
+
+	local visual: VisualSnapshot = {
+		snapshot = snapshot,
+
+		objects = {},
+
+		segments = {}
+	}
+
+	for _, object in ipairs(
+		snapshot.objects
+		) do
+
+		visual.objects[object.id] =
+			object
+	end
+
+	for _, segment in ipairs(
+		snapshot.segments
+		) do
+
+		visual.segments[segment.id] =
+			segment
+	end
+
+	return visual
+end
+
+local function getSnapshotAlpha(
+	previous: VisualSnapshot,
+	current: VisualSnapshot,
+	renderTick: number
+): number
+
+	local previousTick =
+		previous.snapshot.tick
+
+	local currentTick =
+		current.snapshot.tick
+
+	if currentTick <= previousTick then
+		return 0
+	end
+
+	return math.clamp(
+		(renderTick - previousTick)
+			/ (currentTick - previousTick),
+		0,
+		1
+	)
+end
+
+local function lerpAngle(
+	a: number,
+	b: number,
+	alpha: number
+): number
+
+	local difference =
+		(b - a + 180) % 360 - 180
+
+	return a + difference * alpha
+end
+
 ----------------------------------------------------
 -- RENDERIZAÇÃO
 ----------------------------------------------------
@@ -1527,13 +1809,35 @@ end
 RunService.RenderStepped:Connect(
 	function(dt)
 
-		local alpha =
-			1 - math.exp(
-				-35 * dt
-			)
-
 		local myId =
 			player.UserId
+
+		if currentVisualSnapshot then
+
+			visualRenderTick =
+				math.min(
+					visualRenderTick
+						+ dt / FIXED_DT,
+
+					currentVisualSnapshot.snapshot.tick
+						- SNAPSHOT_INTERPOLATION_TICKS
+				)
+		end
+
+		local visualAlpha: number? = nil
+
+		if
+			previousVisualSnapshot
+			and currentVisualSnapshot
+		then
+
+			visualAlpha =
+				getSnapshotAlpha(
+					previousVisualSnapshot,
+					currentVisualSnapshot,
+					visualRenderTick
+				)
+		end
 
 		------------------------------------------------
 		-- PLAYERS
@@ -1585,23 +1889,6 @@ RunService.RenderStepped:Connect(
 						render
 				end
 
-				local interpAlpha
-
-				if uId == myId then
-
-					interpAlpha =
-						1 - math.exp(
-							-50 * dt
-						)
-
-				else
-
-					interpAlpha =
-						1 - math.exp(
-							-25 * dt
-						)
-				end
-
 				------------------------------------------------
 				-- DISC / SHAPE
 				------------------------------------------------
@@ -1611,11 +1898,40 @@ RunService.RenderStepped:Connect(
 					local pos =
 						pData.pos :: Vector2
 
+					if
+						uId ~= myId
+						and previousVisualSnapshot
+						and currentVisualSnapshot
+						and visualAlpha ~= nil
+					then
+
+						local previous =
+							previousVisualSnapshot.snapshot.players[uId]
+
+						local current =
+							currentVisualSnapshot.snapshot.players[uId]
+
+						if previous and current then
+
+							pos =
+								Vector2.new(
+									previous.posX
+										+ (
+											current.posX
+											- previous.posX
+										) * visualAlpha,
+
+									previous.posY
+										+ (
+											current.posY
+											- previous.posY
+										) * visualAlpha
+								)
+						end
+					end
+
 					render.renderPos =
-						(render.renderPos :: Vector2):Lerp(
-							pos,
-							interpAlpha
-						)
+						pos
 
 					local guiPosition =
 						worldToGui(
@@ -1644,17 +1960,67 @@ RunService.RenderStepped:Connect(
 					local b =
 						pData.b :: Vector2
 
-					render.renderA =
-						(render.renderA :: Vector2):Lerp(
-							a,
-							interpAlpha
-						)
+					if
+						uId ~= myId
+						and previousVisualSnapshot
+						and currentVisualSnapshot
+						and visualAlpha ~= nil
+					then
 
-					render.renderB =
-						(render.renderB :: Vector2):Lerp(
-							b,
-							interpAlpha
-						)
+						local previous =
+							previousVisualSnapshot.snapshot.players[uId]
+
+						local current =
+							currentVisualSnapshot.snapshot.players[uId]
+
+						if
+							previous
+							and current
+							and previous.aX ~= nil
+							and previous.aY ~= nil
+							and previous.bX ~= nil
+							and previous.bY ~= nil
+							and current.aX ~= nil
+							and current.aY ~= nil
+							and current.bX ~= nil
+							and current.bY ~= nil
+						then
+
+							a =
+								Vector2.new(
+									previous.aX
+										+ (
+											current.aX
+											- previous.aX
+										) * visualAlpha,
+
+									previous.aY
+										+ (
+											current.aY
+											- previous.aY
+										) * visualAlpha
+								)
+
+							b =
+								Vector2.new(
+									previous.bX
+										+ (
+											current.bX
+											- previous.bX
+										) * visualAlpha,
+
+									previous.bY
+										+ (
+											current.bY
+											- previous.bY
+										) * visualAlpha
+								)
+						end
+					end
+
+					render.renderA = a
+
+					render.renderB = b
 
 					local rA =
 						render.renderA :: Vector2
@@ -1708,14 +2074,39 @@ RunService.RenderStepped:Connect(
 				-- KICK VISUAL
 				------------------------------------------------
 
+				local visualKicking =
+					pData.isKicking
+
+				if
+					uId ~= myId
+					and previousVisualSnapshot
+					and currentVisualSnapshot
+					and visualAlpha ~= nil
+				then
+
+					local previous =
+						previousVisualSnapshot.snapshot.players[uId]
+
+					local current =
+						currentVisualSnapshot.snapshot.players[uId]
+
+					if previous and current then
+
+						visualKicking =
+							visualAlpha < 0.5
+							and previous.isKicking
+							or current.isKicking
+					end
+				end
+
 				if
 					render.stroke
 					and render.lastKicking
-					~= pData.isKicking
+					~= visualKicking
 				then
 
 					render.stroke.Color =
-						pData.isKicking
+						visualKicking
 						and Color3.fromRGB(
 							255,
 							255,
@@ -1728,7 +2119,7 @@ RunService.RenderStepped:Connect(
 						)
 
 					render.lastKicking =
-						pData.isKicking
+						visualKicking
 				end
 			end
 		end
@@ -1754,7 +2145,7 @@ RunService.RenderStepped:Connect(
 		-- OBJETOS DINÂMICOS
 		------------------------------------------------
 
-		for _, render in pairs(
+		for id, render in pairs(
 			mapDynamicRenders
 			) do
 
@@ -1763,28 +2154,79 @@ RunService.RenderStepped:Connect(
 
 			if object then
 
+				local visualObject:
+					GameState.ObjectSnapshot? = nil
+
+				if
+					previousVisualSnapshot
+					and currentVisualSnapshot
+					and visualAlpha ~= nil
+				then
+
+					local previous =
+						previousVisualSnapshot.objects[id]
+
+					local current =
+						currentVisualSnapshot.objects[id]
+
+					if previous and current then
+
+						visualObject = {
+							id = id,
+
+							posX =
+								previous.posX
+								+ (
+									current.posX
+									- previous.posX
+								) * visualAlpha,
+
+							posY =
+								previous.posY
+								+ (
+									current.posY
+									- previous.posY
+								) * visualAlpha,
+
+							velX =
+								current.velX,
+
+							velY =
+								current.velY,
+
+							rotation =
+								lerpAngle(
+									previous.rotation,
+									current.rotation,
+									visualAlpha
+								),
+
+							angularVelocity =
+								current.angularVelocity
+						}
+					end
+				end
+
 				------------------------------------------------
 				-- DISC / SHAPE
 				------------------------------------------------
 
 				if object.pos then
 
-					if render.renderPos then
+					local pos =
+						object.pos
 
-						render.renderPos =
-							render.renderPos:Lerp(
-								object.pos,
-								alpha
+					if visualObject then
+
+						pos =
+							Vector2.new(
+								visualObject.posX,
+								visualObject.posY
 							)
-
-					else
-
-						render.renderPos =
-							object.pos
 					end
 
-					local pos =
-						render.renderPos
+					render.renderPos =
+						pos
 
 					local guiPosition =
 						worldToGui(
@@ -1806,7 +2248,10 @@ RunService.RenderStepped:Connect(
 					if object.size then
 
 						render.frame.Rotation =
-							object.rotation or 0
+							visualObject
+							and visualObject.rotation
+							or object.rotation
+							or 0
 					end
 
 					------------------------------------------------
@@ -1823,30 +2268,57 @@ RunService.RenderStepped:Connect(
 					local simB =
 						object.b
 
-					if render.renderA
-						and render.renderB
+					if
+						previousVisualSnapshot
+						and currentVisualSnapshot
+						and visualAlpha ~= nil
 					then
 
-						render.renderA =
-							render.renderA:Lerp(
-								simA,
-								alpha
-							)
+						local previous =
+							previousVisualSnapshot.segments[id]
 
-						render.renderB =
-							render.renderB:Lerp(
-								simB,
-								alpha
-							)
+						local current =
+							currentVisualSnapshot.segments[id]
 
-					else
+						if previous and current then
 
-						render.renderA =
-							simA
+							simA =
+								Vector2.new(
+									previous.aX
+										+ (
+											current.aX
+											- previous.aX
+										) * visualAlpha,
 
-						render.renderB =
-							simB
+									previous.aY
+										+ (
+											current.aY
+											- previous.aY
+										) * visualAlpha
+								)
+
+							simB =
+								Vector2.new(
+									previous.bX
+										+ (
+											current.bX
+											- previous.bX
+										) * visualAlpha,
+
+									previous.bY
+										+ (
+											current.bY
+											- previous.bY
+										) * visualAlpha
+								)
+						end
 					end
+
+					render.renderA =
+						simA
+
+					render.renderB =
+						simB
 
 					local rA =
 						render.renderA
