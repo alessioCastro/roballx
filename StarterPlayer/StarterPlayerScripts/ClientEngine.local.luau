@@ -695,24 +695,6 @@ local lastConfirmedTick =
 local accumulator =
 	0
 
-type VisualSnapshot = {
-	snapshot: GameState.WorldSnapshot,
-	objects: {[string]: GameState.ObjectSnapshot},
-	segments: {[string]: GameState.SegmentSnapshot}
-}
-
-local previousVisualSnapshot:
-	VisualSnapshot? = nil
-
-local currentVisualSnapshot:
-	VisualSnapshot? = nil
-
-local visualRenderTick =
-	0
-
-local SNAPSHOT_INTERPOLATION_TICKS =
-	2
-
 local currentMoveVector =
 	Vector2.zero
 
@@ -1463,27 +1445,6 @@ gameSnapshotEvent.OnClientEvent:Connect(
 		lastConfirmedTick =
 			serverTick
 
-		local snapshot =
-			GameState.unpackFromNetwork(
-				packed
-			)
-
-		local visualSnapshot =
-			getVisualSnapshot(
-				snapshot
-			)
-
-		previousVisualSnapshot =
-			currentVisualSnapshot
-				or visualSnapshot
-
-		currentVisualSnapshot =
-			visualSnapshot
-
-		visualRenderTick =
-			serverTick
-				- SNAPSHOT_INTERPOLATION_TICKS
-
 		------------------------------------------------
 		-- HUD
 		------------------------------------------------
@@ -1735,73 +1696,6 @@ local function worldToGui(
 	)
 end
 
-local function getVisualSnapshot(
-	snapshot: GameState.WorldSnapshot
-): VisualSnapshot
-
-	local visual: VisualSnapshot = {
-		snapshot = snapshot,
-
-		objects = {},
-
-		segments = {}
-	}
-
-	for _, object in ipairs(
-		snapshot.objects
-		) do
-
-		visual.objects[object.id] =
-			object
-	end
-
-	for _, segment in ipairs(
-		snapshot.segments
-		) do
-
-		visual.segments[segment.id] =
-			segment
-	end
-
-	return visual
-end
-
-local function getSnapshotAlpha(
-	previous: VisualSnapshot,
-	current: VisualSnapshot,
-	renderTick: number
-): number
-
-	local previousTick =
-		previous.snapshot.tick
-
-	local currentTick =
-		current.snapshot.tick
-
-	if currentTick <= previousTick then
-		return 0
-	end
-
-	return math.clamp(
-		(renderTick - previousTick)
-			/ (currentTick - previousTick),
-		0,
-		1
-	)
-end
-
-local function lerpAngle(
-	a: number,
-	b: number,
-	alpha: number
-): number
-
-	local difference =
-		(b - a + 180) % 360 - 180
-
-	return a + difference * alpha
-end
-
 ----------------------------------------------------
 -- RENDERIZAÇÃO
 ----------------------------------------------------
@@ -1809,35 +1703,13 @@ end
 RunService.RenderStepped:Connect(
 	function(dt)
 
+		local alpha =
+			1 - math.exp(
+				-35 * dt
+			)
+
 		local myId =
 			player.UserId
-
-		if currentVisualSnapshot then
-
-			visualRenderTick =
-				math.min(
-					visualRenderTick
-						+ dt / FIXED_DT,
-
-					currentVisualSnapshot.snapshot.tick
-						- SNAPSHOT_INTERPOLATION_TICKS
-				)
-		end
-
-		local visualAlpha: number? = nil
-
-		if
-			previousVisualSnapshot
-			and currentVisualSnapshot
-		then
-
-			visualAlpha =
-				getSnapshotAlpha(
-					previousVisualSnapshot,
-					currentVisualSnapshot,
-					visualRenderTick
-				)
-		end
 
 		------------------------------------------------
 		-- PLAYERS
@@ -1889,6 +1761,23 @@ RunService.RenderStepped:Connect(
 						render
 				end
 
+				local interpAlpha
+
+				if uId == myId then
+
+					interpAlpha =
+						1 - math.exp(
+							-50 * dt
+						)
+
+				else
+
+					interpAlpha =
+						1 - math.exp(
+							-25 * dt
+						)
+				end
+
 				------------------------------------------------
 				-- DISC / SHAPE
 				------------------------------------------------
@@ -1898,40 +1787,11 @@ RunService.RenderStepped:Connect(
 					local pos =
 						pData.pos :: Vector2
 
-					if
-						uId ~= myId
-						and previousVisualSnapshot
-						and currentVisualSnapshot
-						and visualAlpha ~= nil
-					then
-
-						local previous =
-							previousVisualSnapshot.snapshot.players[uId]
-
-						local current =
-							currentVisualSnapshot.snapshot.players[uId]
-
-						if previous and current then
-
-							pos =
-								Vector2.new(
-									previous.posX
-										+ (
-											current.posX
-											- previous.posX
-										) * visualAlpha,
-
-									previous.posY
-										+ (
-											current.posY
-											- previous.posY
-										) * visualAlpha
-								)
-						end
-					end
-
 					render.renderPos =
-						pos
+						(render.renderPos :: Vector2):Lerp(
+							pos,
+							interpAlpha
+						)
 
 					local guiPosition =
 						worldToGui(
@@ -1960,67 +1820,17 @@ RunService.RenderStepped:Connect(
 					local b =
 						pData.b :: Vector2
 
-					if
-						uId ~= myId
-						and previousVisualSnapshot
-						and currentVisualSnapshot
-						and visualAlpha ~= nil
-					then
+					render.renderA =
+						(render.renderA :: Vector2):Lerp(
+							a,
+							interpAlpha
+						)
 
-						local previous =
-							previousVisualSnapshot.snapshot.players[uId]
-
-						local current =
-							currentVisualSnapshot.snapshot.players[uId]
-
-						if
-							previous
-							and current
-							and previous.aX ~= nil
-							and previous.aY ~= nil
-							and previous.bX ~= nil
-							and previous.bY ~= nil
-							and current.aX ~= nil
-							and current.aY ~= nil
-							and current.bX ~= nil
-							and current.bY ~= nil
-						then
-
-							a =
-								Vector2.new(
-									previous.aX
-										+ (
-											current.aX
-											- previous.aX
-										) * visualAlpha,
-
-									previous.aY
-										+ (
-											current.aY
-											- previous.aY
-										) * visualAlpha
-								)
-
-							b =
-								Vector2.new(
-									previous.bX
-										+ (
-											current.bX
-											- previous.bX
-										) * visualAlpha,
-
-									previous.bY
-										+ (
-											current.bY
-											- previous.bY
-										) * visualAlpha
-								)
-						end
-					end
-
-					render.renderA = a
-
-					render.renderB = b
+					render.renderB =
+						(render.renderB :: Vector2):Lerp(
+							b,
+							interpAlpha
+						)
 
 					local rA =
 						render.renderA :: Vector2
@@ -2074,39 +1884,14 @@ RunService.RenderStepped:Connect(
 				-- KICK VISUAL
 				------------------------------------------------
 
-				local visualKicking =
-					pData.isKicking
-
-				if
-					uId ~= myId
-					and previousVisualSnapshot
-					and currentVisualSnapshot
-					and visualAlpha ~= nil
-				then
-
-					local previous =
-						previousVisualSnapshot.snapshot.players[uId]
-
-					local current =
-						currentVisualSnapshot.snapshot.players[uId]
-
-					if previous and current then
-
-						visualKicking =
-							visualAlpha < 0.5
-							and previous.isKicking
-							or current.isKicking
-					end
-				end
-
 				if
 					render.stroke
 					and render.lastKicking
-					~= visualKicking
+					~= pData.isKicking
 				then
 
 					render.stroke.Color =
-						visualKicking
+						pData.isKicking
 						and Color3.fromRGB(
 							255,
 							255,
@@ -2119,7 +1904,7 @@ RunService.RenderStepped:Connect(
 						)
 
 					render.lastKicking =
-						visualKicking
+						pData.isKicking
 				end
 			end
 		end
@@ -2145,7 +1930,7 @@ RunService.RenderStepped:Connect(
 		-- OBJETOS DINÂMICOS
 		------------------------------------------------
 
-		for id, render in pairs(
+		for _, render in pairs(
 			mapDynamicRenders
 			) do
 
@@ -2154,79 +1939,28 @@ RunService.RenderStepped:Connect(
 
 			if object then
 
-				local visualObject:
-					GameState.ObjectSnapshot? = nil
-
-				if
-					previousVisualSnapshot
-					and currentVisualSnapshot
-					and visualAlpha ~= nil
-				then
-
-					local previous =
-						previousVisualSnapshot.objects[id]
-
-					local current =
-						currentVisualSnapshot.objects[id]
-
-					if previous and current then
-
-						visualObject = {
-							id = id,
-
-							posX =
-								previous.posX
-								+ (
-									current.posX
-									- previous.posX
-								) * visualAlpha,
-
-							posY =
-								previous.posY
-								+ (
-									current.posY
-									- previous.posY
-								) * visualAlpha,
-
-							velX =
-								current.velX,
-
-							velY =
-								current.velY,
-
-							rotation =
-								lerpAngle(
-									previous.rotation,
-									current.rotation,
-									visualAlpha
-								),
-
-							angularVelocity =
-								current.angularVelocity
-						}
-					end
-				end
-
 				------------------------------------------------
 				-- DISC / SHAPE
 				------------------------------------------------
 
 				if object.pos then
 
-					local pos =
-						object.pos
+					if render.renderPos then
 
-					if visualObject then
-
-						pos =
-							Vector2.new(
-								visualObject.posX,
-								visualObject.posY
+						render.renderPos =
+							render.renderPos:Lerp(
+								object.pos,
+								alpha
 							)
+
+					else
+
+						render.renderPos =
+							object.pos
 					end
 
-					render.renderPos =
-						pos
+					local pos =
+						render.renderPos
 
 					local guiPosition =
 						worldToGui(
@@ -2248,10 +1982,7 @@ RunService.RenderStepped:Connect(
 					if object.size then
 
 						render.frame.Rotation =
-							visualObject
-							and visualObject.rotation
-							or object.rotation
-							or 0
+							object.rotation or 0
 					end
 
 					------------------------------------------------
@@ -2268,57 +1999,30 @@ RunService.RenderStepped:Connect(
 					local simB =
 						object.b
 
-					if
-						previousVisualSnapshot
-						and currentVisualSnapshot
-						and visualAlpha ~= nil
+					if render.renderA
+						and render.renderB
 					then
 
-						local previous =
-							previousVisualSnapshot.segments[id]
+						render.renderA =
+							render.renderA:Lerp(
+								simA,
+								alpha
+							)
 
-						local current =
-							currentVisualSnapshot.segments[id]
+						render.renderB =
+							render.renderB:Lerp(
+								simB,
+								alpha
+							)
 
-						if previous and current then
+					else
 
-							simA =
-								Vector2.new(
-									previous.aX
-										+ (
-											current.aX
-											- previous.aX
-										) * visualAlpha,
+						render.renderA =
+							simA
 
-									previous.aY
-										+ (
-											current.aY
-											- previous.aY
-										) * visualAlpha
-								)
-
-							simB =
-								Vector2.new(
-									previous.bX
-										+ (
-											current.bX
-											- previous.bX
-										) * visualAlpha,
-
-									previous.bY
-										+ (
-											current.bY
-											- previous.bY
-										) * visualAlpha
-								)
-						end
+						render.renderB =
+							simB
 					end
-
-					render.renderA =
-						simA
-
-					render.renderB =
-						simB
 
 					local rA =
 						render.renderA
