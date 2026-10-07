@@ -295,52 +295,6 @@ function PhysicsEngine.createBroadphase(
 	return broadphase
 end
 
-function PhysicsEngine.rebuildBroadphase(
-	broadphase: Broadphase,
-	collisionObjects: {Object},
-	collisionSegments: {Segment}
-)
-	SpatialHash.clear(
-		broadphase.dynamicObjectGrid
-	)
-
-	SpatialHash.clear(
-		broadphase.dynamicSegmentGrid
-	)
-
-	table.clear(
-		broadphase.dynamicObjectEntries
-	)
-
-	table.clear(
-		broadphase.dynamicSegmentEntries
-	)
-
-	for index, object in ipairs(collisionObjects) do
-		if object.isStatic ~= true then
-			broadphase.dynamicObjectEntries[object] =
-				SpatialHash.insert(
-					broadphase.dynamicObjectGrid,
-					object,
-					getObjectAABB(object),
-					index
-				)
-		end
-	end
-
-	for index, segment in ipairs(collisionSegments) do
-		if segment.isStatic ~= true then
-			broadphase.dynamicSegmentEntries[segment] =
-				SpatialHash.insert(
-					broadphase.dynamicSegmentGrid,
-					segment,
-					getSegmentAABB(segment),
-					index
-				)
-		end
-	end
-end
-
 function PhysicsEngine.rebuildPlayerBroadphase(
 	broadphase: Broadphase,
 	playersData,
@@ -2826,18 +2780,13 @@ function PhysicsEngine.Step(
 				segment,
 				fixedDt
 			)
+
+			updateSegmentBroadphase(
+				broadphase,
+				segment
+			)
 		end
 	end
-
-	------------------------------------------------
-	-- BROADPHASE
-	------------------------------------------------
-
-	PhysicsEngine.rebuildBroadphase(
-		broadphase,
-		objects,
-		segments
-	)
 
 	------------------------------------------------
 	-- SUBSTEPS
@@ -2949,7 +2898,10 @@ function PhysicsEngine.Step(
 
 					if
 						objectB ~= objectA
-						and idxB > idxA
+						and (
+							objectB.isStatic == true
+							or idxB > idxA
+						)
 					then
 						PhysicsEngine.resolveShapeVsShapeCollision(
 							objectA,
