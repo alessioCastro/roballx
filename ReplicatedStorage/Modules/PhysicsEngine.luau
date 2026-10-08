@@ -919,219 +919,221 @@ end
 ----------------------------------------------------
 
 function PhysicsEngine.resolveShapeCollision(
-	obj: Object,
-	object: Object
-)
-	if not canCollide(obj, object) then
-		return
-	end
+    obj: Object,
+    object: Object
+): boolean
+    if not canCollide(obj, object) then
+        return false
+    end
 
-	if
-		obj.isSolid == false
-		or object.isSolid == false
-	then
-		return
-	end
+    if
+        obj.isSolid == false
+        or object.isSolid == false
+    then
+        return false
+    end
 
-	local objIsStatic =
-		obj.isStatic == true
+    local objIsStatic =
+        obj.isStatic == true
 
-	local objectIsStatic =
-		object.isStatic ~= false
+    local objectIsStatic =
+        object.isStatic ~= false
 
-	if objIsStatic and objectIsStatic then
-		return
-	end
+    if objIsStatic and objectIsStatic then
+        return false
+    end
 
-	local object1, object2, objectRadius =
-		getObjectCollisionSegment(object)
+    local object1, object2, objectRadius =
+        getObjectCollisionSegment(object)
 
-	local closestOnSegment =
-		closestPointOnSegment(
-			obj.pos,
-			object1,
-			object2
-		)
+    local closestOnSegment =
+        closestPointOnSegment(
+            obj.pos,
+            object1,
+            object2
+        )
 
-	local delta =
-		obj.pos - closestOnSegment
+    local delta =
+        obj.pos - closestOnSegment
 
-	local dist =
-		delta.Magnitude
+    local dist =
+        delta.Magnitude
 
-	local minDist =
-		getObjectRadius(obj)
-		+ objectRadius
+    local minDist =
+        getObjectRadius(obj)
+        + objectRadius
 
-	if dist >= minDist then
-		return
-	end
+    if dist >= minDist then
+        return false
+    end
 
-	local normal =
-		dist > 0.0001
-		and delta / dist
-		or Vector2.new(0, 1)
+    local normal =
+        dist > 0.0001
+        and delta / dist
+        or Vector2.new(0, 1)
 
-	local overlap =
-		minDist - dist
+    local overlap =
+        minDist - dist
 
-	local objInverseMass =
-		objIsStatic
-		and 0
-		or 1 / obj.mass
+    local objInverseMass =
+        objIsStatic
+        and 0
+        or 1 / obj.mass
 
-	local objectInverseMass =
-		objectIsStatic
-		and 0
-		or 1 / object.mass
+    local objectInverseMass =
+        objectIsStatic
+        and 0
+        or 1 / object.mass
 
-	local totalInverseMass =
-		objInverseMass
-		+ objectInverseMass
+    local totalInverseMass =
+        objInverseMass
+        + objectInverseMass
 
-	if totalInverseMass <= 0 then
-		return
-	end
+    if totalInverseMass <= 0 then
+        return false
+    end
 
-	------------------------------------------------
-	-- POSITION CORRECTION
-	------------------------------------------------
+    ------------------------------------------------
+    -- POSITION CORRECTION
+    ------------------------------------------------
 
-	obj.pos +=
-		normal
-		* overlap
-		* (
-			objInverseMass
-			/ totalInverseMass
-		)
+    obj.pos +=
+        normal
+        * overlap
+        * (
+            objInverseMass
+            / totalInverseMass
+        )
 
-	object.pos -=
-		normal
-		* overlap
-		* (
-			objectInverseMass
-			/ totalInverseMass
-		)
+    object.pos -=
+        normal
+        * overlap
+        * (
+            objectInverseMass
+            / totalInverseMass
+        )
 
-	------------------------------------------------
-	-- CONTACT POINT
-	------------------------------------------------
+    ------------------------------------------------
+    -- CONTACT POINT
+    ------------------------------------------------
 
-	local contactPoint =
-		obj.pos
-		- normal * getObjectRadius(obj)
+    local contactPoint =
+        obj.pos
+        - normal * getObjectRadius(obj)
 
-	local rObj =
-		contactPoint - obj.pos
+    local rObj =
+        contactPoint - obj.pos
 
-	local rObject =
-		contactPoint - object.pos
+    local rObject =
+        contactPoint - object.pos
 
-	------------------------------------------------
-	-- RELATIVE CONTACT VELOCITY
-	------------------------------------------------
+    ------------------------------------------------
+    -- RELATIVE CONTACT VELOCITY
+    ------------------------------------------------
 
-	local objContactVelocity =
-		getContactVelocity(
-			obj,
-			rObj
-		)
+    local objContactVelocity =
+        getContactVelocity(
+            obj,
+            rObj
+        )
 
-	local objectContactVelocity =
-		getContactVelocity(
-			object,
-			rObject
-		)
+    local objectContactVelocity =
+        getContactVelocity(
+            object,
+            rObject
+        )
 
-	local relativeVelocity =
-		objContactVelocity
-		- objectContactVelocity
+    local relativeVelocity =
+        objContactVelocity
+        - objectContactVelocity
 
-	local velAlongNormal =
-		relativeVelocity:Dot(normal)
+    local velAlongNormal =
+        relativeVelocity:Dot(normal)
 
-	if velAlongNormal >= 0 then
-		return
-	end
+    if velAlongNormal >= 0 then
+        return true
+    end
 
-	local e =
-		getCombinedRestitution(
-			obj,
-			object
-		)
+    local e =
+        getCombinedRestitution(
+            obj,
+            object
+        )
 
-	------------------------------------------------
-	-- ROTATIONAL TERMS
-	------------------------------------------------
+    ------------------------------------------------
+    -- ROTATIONAL TERMS
+    ------------------------------------------------
 
-	local objInverseInertia =
-		getInverseInertia(obj)
+    local objInverseInertia =
+        getInverseInertia(obj)
 
-	local objectInverseInertia =
-		getInverseInertia(object)
+    local objectInverseInertia =
+        getInverseInertia(object)
 
-	local rotationalObj =
-		crossScalar(
-			rObj,
-			normal
-		)
+    local rotationalObj =
+        crossScalar(
+            rObj,
+            normal
+        )
 
-	local rotationalObject =
-		crossScalar(
-			rObject,
-			normal
-		)
+    local rotationalObject =
+        crossScalar(
+            rObject,
+            normal
+        )
 
-	local denominator =
-		totalInverseMass
-		+ rotationalObj
-			* rotationalObj
-			* objInverseInertia
-		+ rotationalObject
-			* rotationalObject
-			* objectInverseInertia
+    local denominator =
+        totalInverseMass
+        + rotationalObj
+            * rotationalObj
+            * objInverseInertia
+        + rotationalObject
+            * rotationalObject
+            * objectInverseInertia
 
-	if denominator <= 0 then
-		return
-	end
+    if denominator <= 0 then
+        return true
+    end
 
-	local impulseMagnitude =
-		-(1 + e)
-		* velAlongNormal
-		/ denominator
+    local impulseMagnitude =
+        -(1 + e)
+        * velAlongNormal
+        / denominator
 
-	local impulse =
-		normal * impulseMagnitude
+    local impulse =
+        normal * impulseMagnitude
 
-	------------------------------------------------
-	-- LINEAR VELOCITY
-	------------------------------------------------
+    ------------------------------------------------
+    -- LINEAR VELOCITY
+    ------------------------------------------------
 
-	if not objIsStatic then
-		obj.vel +=
-			impulse * objInverseMass
-	end
+    if not objIsStatic then
+        obj.vel +=
+            impulse * objInverseMass
+    end
 
-	if not objectIsStatic then
-		object.vel -=
-			impulse * objectInverseMass
-	end
+    if not objectIsStatic then
+        object.vel -=
+            impulse * objectInverseMass
+    end
 
-	------------------------------------------------
-	-- ANGULAR VELOCITY
-	------------------------------------------------
+    ------------------------------------------------
+    -- ANGULAR VELOCITY
+    ------------------------------------------------
 
-	applyAngularImpulse(
-		obj,
-		rObj,
-		impulse
-	)
+    applyAngularImpulse(
+        obj,
+        rObj,
+        impulse
+    )
 
-	applyAngularImpulse(
-		object,
-		rObject,
-		-impulse
-	)
+    applyAngularImpulse(
+        object,
+        rObject,
+        -impulse
+    )
+
+    return true
 end
 
 ----------------------------------------------------
