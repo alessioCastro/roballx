@@ -397,21 +397,29 @@ function PhysicsEngine.rebuildPlayerBroadphase(
     playersData,
     sortedUserIds
 )
-    local activePlayers = {}
+    local generation =
+        (broadphase.playerGeneration or 0) + 1
+
+    broadphase.playerGeneration =
+        generation
 
     for index, userId in ipairs(sortedUserIds) do
         local player =
             playersData[userId]
 
         if player then
-            activePlayers[player] = true
-            broadphase.playerIndex[player] = index
+            broadphase.playerIndex[player] =
+                index
 
             local entry =
                 broadphase.playerEntries[player]
 
             if entry then
-                entry.index = index
+                entry.index =
+                    index
+
+                entry.playerGeneration =
+                    generation
 
                 getPlayerAABB(
                     player,
@@ -437,19 +445,25 @@ function PhysicsEngine.rebuildPlayerBroadphase(
                     aabb
                 )
 
-                broadphase.playerEntries[player] =
+                local newEntry =
                     SpatialHash.insert(
                         broadphase.playerGrid,
                         player,
                         aabb,
                         index
                     )
+
+                newEntry.playerGeneration =
+                    generation
+
+                broadphase.playerEntries[player] =
+                    newEntry
             end
         end
     end
 
     for player, entry in pairs(broadphase.playerEntries) do
-        if not activePlayers[player] then
+        if entry.playerGeneration ~= generation then
             SpatialHash.remove(
                 broadphase.playerGrid,
                 entry
