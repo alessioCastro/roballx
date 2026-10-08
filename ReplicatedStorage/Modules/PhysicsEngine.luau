@@ -122,55 +122,130 @@ export type Broadphase = {
 -- GEOMETRY
 ----------------------------------------------------
 
-local function getObjectAABB(object: Object): SpatialHash.AABB
-	local p1 = object.pos + (object.segmentP1 :: Vector2)
-	local p2 = object.pos + (object.segmentP2 :: Vector2)
-	local radius = object.segmentRadius :: number
+local function getObjectAABB(
+    object: Object,
+    out: SpatialHash.AABB
+): SpatialHash.AABB
+    local p1 =
+        object.pos
+        + (object.segmentP1 :: Vector2)
 
-	return {
-		minX = math.min(p1.X, p2.X) - radius,
-		minY = math.min(p1.Y, p2.Y) - radius,
-		maxX = math.max(p1.X, p2.X) + radius,
-		maxY = math.max(p1.Y, p2.Y) + radius,
-	}
+    local p2 =
+        object.pos
+        + (object.segmentP2 :: Vector2)
+
+    local radius =
+        object.segmentRadius :: number
+
+    out.minX =
+        math.min(p1.X, p2.X)
+        - radius
+
+    out.minY =
+        math.min(p1.Y, p2.Y)
+        - radius
+
+    out.maxX =
+        math.max(p1.X, p2.X)
+        + radius
+
+    out.maxY =
+        math.max(p1.Y, p2.Y)
+        + radius
+
+    return out
 end
 
-local function getSegmentAABB(segment: Segment): SpatialHash.AABB
-	local halfThickness = (segment.thickness or 0) * 0.5
+local function getSegmentAABB(
+    segment: Segment,
+    out: SpatialHash.AABB
+): SpatialHash.AABB
+    local halfThickness =
+        (segment.thickness or 0) * 0.5
 
-	return {
-		minX = math.min(segment.a.X, segment.b.X) - halfThickness,
-		minY = math.min(segment.a.Y, segment.b.Y) - halfThickness,
-		maxX = math.max(segment.a.X, segment.b.X) + halfThickness,
-		maxY = math.max(segment.a.Y, segment.b.Y) + halfThickness,
-	}
+    out.minX =
+        math.min(segment.a.X, segment.b.X)
+        - halfThickness
+
+    out.minY =
+        math.min(segment.a.Y, segment.b.Y)
+        - halfThickness
+
+    out.maxX =
+        math.max(segment.a.X, segment.b.X)
+        + halfThickness
+
+    out.maxY =
+        math.max(segment.a.Y, segment.b.Y)
+        + halfThickness
+
+    return out
 end
 
-local function getPlayerAABB(player: PlayerObject): SpatialHash.AABB
-	if player.kind == "object" then
-		local pos = player.pos :: Vector2
-		local p1 = pos + (player.segmentP1 :: Vector2)
-		local p2 = pos + (player.segmentP2 :: Vector2)
-		local radius = player.segmentRadius :: number
+local function getPlayerAABB(
+    player: PlayerObject,
+    out: SpatialHash.AABB
+): SpatialHash.AABB
+    if player.kind == "object" then
+        local pos =
+            player.pos :: Vector2
 
-		return {
-			minX = math.min(p1.X, p2.X) - radius,
-			minY = math.min(p1.Y, p2.Y) - radius,
-			maxX = math.max(p1.X, p2.X) + radius,
-			maxY = math.max(p1.Y, p2.Y) + radius,
-		}
-	end
+        local p1 =
+            pos
+            + (player.segmentP1 :: Vector2)
 
-	local a = player.a :: Vector2
-	local b = player.b :: Vector2
-	local halfThickness = (player.thickness or 0) * 0.5
+        local p2 =
+            pos
+            + (player.segmentP2 :: Vector2)
 
-	return {
-		minX = math.min(a.X, b.X) - halfThickness,
-		minY = math.min(a.Y, b.Y) - halfThickness,
-		maxX = math.max(a.X, b.X) + halfThickness,
-		maxY = math.max(a.Y, b.Y) + halfThickness,
-	}
+        local radius =
+            player.segmentRadius :: number
+
+        out.minX =
+            math.min(p1.X, p2.X)
+            - radius
+
+        out.minY =
+            math.min(p1.Y, p2.Y)
+            - radius
+
+        out.maxX =
+            math.max(p1.X, p2.X)
+            + radius
+
+        out.maxY =
+            math.max(p1.Y, p2.Y)
+            + radius
+
+        return out
+    end
+
+    local a =
+        player.a :: Vector2
+
+    local b =
+        player.b :: Vector2
+
+    local halfThickness =
+        (player.thickness or 0) * 0.5
+
+    out.minX =
+        math.min(a.X, b.X)
+        - halfThickness
+
+    out.minY =
+        math.min(a.Y, b.Y)
+        - halfThickness
+
+    out.maxX =
+        math.max(a.X, b.X)
+        + halfThickness
+
+    out.maxY =
+        math.max(a.Y, b.Y)
+        + halfThickness
+
+    return out
 end
 
 local function getPlayerCenter(player: PlayerObject): Vector2
@@ -228,121 +303,162 @@ end
 ----------------------------------------------------
 
 function PhysicsEngine.createBroadphase(
-	collisionObjects: {Object},
-	collisionSegments: {Segment},
-	cellSize: number
+    collisionObjects: {Object},
+    collisionSegments: {Segment},
+    cellSize: number
 ): Broadphase
+    local broadphase: Broadphase = {
+        staticObjectGrid = SpatialHash.new(cellSize),
+        staticSegmentGrid = SpatialHash.new(cellSize),
+        dynamicObjectGrid = SpatialHash.new(cellSize),
+        dynamicSegmentGrid = SpatialHash.new(cellSize),
+        playerGrid = SpatialHash.new(cellSize),
+        objectIndex = {},
+        segmentIndex = {},
+        playerIndex = {},
+        dynamicObjectEntries = {},
+        dynamicSegmentEntries = {},
+        playerEntries = {},
+    }
 
-	local broadphase: Broadphase = {
-		staticObjectGrid = SpatialHash.new(cellSize),
-		staticSegmentGrid = SpatialHash.new(cellSize),
+    for index, object in ipairs(collisionObjects) do
+        broadphase.objectIndex[object] = index
 
-		dynamicObjectGrid = SpatialHash.new(cellSize),
-		dynamicSegmentGrid = SpatialHash.new(cellSize),
+        local grid =
+            object.isStatic
+            and broadphase.staticObjectGrid
+            or broadphase.dynamicObjectGrid
 
-		playerGrid = SpatialHash.new(cellSize),
+        local aabb: SpatialHash.AABB = {
+            minX = 0,
+            minY = 0,
+            maxX = 0,
+            maxY = 0,
+        }
 
-		objectIndex = {},
-		segmentIndex = {},
-		playerIndex = {},
+        getObjectAABB(
+            object,
+            aabb
+        )
 
-		dynamicObjectEntries = {},
-		dynamicSegmentEntries = {},
+        local entry =
+            SpatialHash.insert(
+                grid,
+                object,
+                aabb,
+                index
+            )
 
-		playerEntries = {},
-	}
+        if object.isStatic ~= true then
+            broadphase.dynamicObjectEntries[object] =
+                entry
+        end
+    end
 
-	for index, object in ipairs(collisionObjects) do
-		broadphase.objectIndex[object] = index
+    for index, segment in ipairs(collisionSegments) do
+        broadphase.segmentIndex[segment] = index
 
-		local grid =
-			object.isStatic
-			and broadphase.staticObjectGrid
-			or broadphase.dynamicObjectGrid
+        local grid =
+            segment.isStatic
+            and broadphase.staticSegmentGrid
+            or broadphase.dynamicSegmentGrid
 
-		local entry = SpatialHash.insert(
-			grid,
-			object,
-			getObjectAABB(object),
-			index
-		)
+        local aabb: SpatialHash.AABB = {
+            minX = 0,
+            minY = 0,
+            maxX = 0,
+            maxY = 0,
+        }
 
-		if object.isStatic ~= true then
-			broadphase.dynamicObjectEntries[object] = entry
-		end
-	end
+        getSegmentAABB(
+            segment,
+            aabb
+        )
 
-	for index, segment in ipairs(collisionSegments) do
-		broadphase.segmentIndex[segment] = index
+        local entry =
+            SpatialHash.insert(
+                grid,
+                segment,
+                aabb,
+                index
+            )
 
-		local grid =
-			segment.isStatic
-			and broadphase.staticSegmentGrid
-			or broadphase.dynamicSegmentGrid
+        if segment.isStatic ~= true then
+            broadphase.dynamicSegmentEntries[segment] =
+                entry
+        end
+    end
 
-		local entry = SpatialHash.insert(
-			grid,
-			segment,
-			getSegmentAABB(segment),
-			index
-		)
-
-		if segment.isStatic ~= true then
-			broadphase.dynamicSegmentEntries[segment] = entry
-		end
-	end
-
-	return broadphase
+    return broadphase
 end
 
 function PhysicsEngine.rebuildPlayerBroadphase(
-	broadphase: Broadphase,
-	playersData,
-	sortedUserIds
+    broadphase: Broadphase,
+    playersData,
+    sortedUserIds
 )
-	local activePlayers = {}
+    local activePlayers = {}
 
-	for index, userId in ipairs(sortedUserIds) do
-		local player = playersData[userId]
+    for index, userId in ipairs(sortedUserIds) do
+        local player =
+            playersData[userId]
 
-		if player then
-			activePlayers[player] = true
-			broadphase.playerIndex[player] = index
+        if player then
+            activePlayers[player] = true
+            broadphase.playerIndex[player] = index
 
-			local entry = broadphase.playerEntries[player]
+            local entry =
+                broadphase.playerEntries[player]
 
-			if entry then
-				entry.index = index
+            if entry then
+                entry.index = index
 
-				broadphase.playerEntries[player] =
-					SpatialHash.update(
-						broadphase.playerGrid,
-						entry,
-						getPlayerAABB(player)
-					)
-			else
-				broadphase.playerEntries[player] =
-					SpatialHash.insert(
-						broadphase.playerGrid,
-						player,
-						getPlayerAABB(player),
-						index
-					)
-			end
-		end
-	end
+                getPlayerAABB(
+                    player,
+                    entry.aabb
+                )
 
-	for player, entry in pairs(broadphase.playerEntries) do
-		if not activePlayers[player] then
-			SpatialHash.remove(
-				broadphase.playerGrid,
-				entry
-			)
+                broadphase.playerEntries[player] =
+                    SpatialHash.update(
+                        broadphase.playerGrid,
+                        entry,
+                        entry.aabb
+                    )
+            else
+                local aabb: SpatialHash.AABB = {
+                    minX = 0,
+                    minY = 0,
+                    maxX = 0,
+                    maxY = 0,
+                }
 
-			broadphase.playerEntries[player] = nil
-			broadphase.playerIndex[player] = nil
-		end
-	end
+                getPlayerAABB(
+                    player,
+                    aabb
+                )
+
+                broadphase.playerEntries[player] =
+                    SpatialHash.insert(
+                        broadphase.playerGrid,
+                        player,
+                        aabb,
+                        index
+                    )
+            end
+        end
+    end
+
+    for player, entry in pairs(broadphase.playerEntries) do
+        if not activePlayers[player] then
+            SpatialHash.remove(
+                broadphase.playerGrid,
+                entry
+            )
+
+            broadphase.playerEntries[player] = nil
+            broadphase.playerIndex[player] = nil
+        end
+    end
 end
 
 local function getCombinedRestitution(
@@ -2586,54 +2702,69 @@ end
 ----------------------------------------------------
 
 local function updateObjectBroadphase(
-	broadphase: Broadphase,
-	object: Object
+    broadphase: Broadphase,
+    object: Object
 )
-	local entry =
-		broadphase.dynamicObjectEntries[object]
+    local entry =
+        broadphase.dynamicObjectEntries[object]
 
-	if entry then
-		broadphase.dynamicObjectEntries[object] =
-			SpatialHash.update(
-				broadphase.dynamicObjectGrid,
-				entry,
-				getObjectAABB(object)
-			)
-	end
+    if entry then
+        getObjectAABB(
+            object,
+            entry.aabb
+        )
+
+        broadphase.dynamicObjectEntries[object] =
+            SpatialHash.update(
+                broadphase.dynamicObjectGrid,
+                entry,
+                entry.aabb
+            )
+    end
 end
 
 local function updateSegmentBroadphase(
-	broadphase: Broadphase,
-	segment: Segment
+    broadphase: Broadphase,
+    segment: Segment
 )
-	local entry =
-		broadphase.dynamicSegmentEntries[segment]
+    local entry =
+        broadphase.dynamicSegmentEntries[segment]
 
-	if entry then
-		broadphase.dynamicSegmentEntries[segment] =
-			SpatialHash.update(
-				broadphase.dynamicSegmentGrid,
-				entry,
-				getSegmentAABB(segment)
-			)
-	end
+    if entry then
+        getSegmentAABB(
+            segment,
+            entry.aabb
+        )
+
+        broadphase.dynamicSegmentEntries[segment] =
+            SpatialHash.update(
+                broadphase.dynamicSegmentGrid,
+                entry,
+                entry.aabb
+            )
+    end
 end
 
 local function updatePlayerBroadphase(
-	broadphase: Broadphase,
-	player: PlayerObject
+    broadphase: Broadphase,
+    player: PlayerObject
 )
-	local entry =
-		broadphase.playerEntries[player]
+    local entry =
+        broadphase.playerEntries[player]
 
-	if entry then
-		broadphase.playerEntries[player] =
-			SpatialHash.update(
-				broadphase.playerGrid,
-				entry,
-				getPlayerAABB(player)
-			)
-	end
+    if entry then
+        getPlayerAABB(
+            player,
+            entry.aabb
+        )
+
+        broadphase.playerEntries[player] =
+            SpatialHash.update(
+                broadphase.playerGrid,
+                entry,
+                entry.aabb
+            )
+    end
 end
 
 ----------------------------------------------------
@@ -2641,435 +2772,460 @@ end
 ----------------------------------------------------
 
 function PhysicsEngine.Step(
-	playersData,
-	sortedUserIds,
-	objects,
-	segments,
-	broadphase,
-	gameplay,
-	kickableObjects,
-	fixedDt,
-	currentTick
+    playersData,
+    sortedUserIds,
+    objects,
+    segments,
+    broadphase,
+    gameplay,
+    kickableObjects,
+    fixedDt,
+    currentTick
 )
-	local playerPhys =
-		gameplay.player.movement
-
-	local kickPhys =
-		gameplay.kick
-
-	PhysicsEngine.rebuildPlayerBroadphase(
-		broadphase,
-		playersData,
-		sortedUserIds
-	)
-
-	------------------------------------------------
-	-- PLAYERS
-	------------------------------------------------
-
-	for _, userId in ipairs(sortedUserIds) do
-		local pData =
-			playersData[userId]
-
-		if pData then
-			local decelFactor =
-				playerPhys.decelFactor
-				or 0.88
-
-			pData.vel *=
-				decelFactor
-
-			if
-				pData.input
-				and pData.input.Magnitude > 0
-			then
-				local mass =
-					math.max(
-						pData.mass,
-						0.000001
-					)
-
-				local force =
-					pData.input.Unit
-					* (
-						playerPhys.accel
-						* mass
-					)
-
-				local acceleration =
-					force / mass
-
-				pData.vel +=
-					acceleration * fixedDt
-			end
-
-			local friction =
-				math.clamp(
-					playerPhys.friction or 1,
-					0,
-					1
-				)
-
-			local frictionFactor =
-				math.max(
-					0,
-					1 - friction * fixedDt
-				)
-
-			pData.vel *=
-				frictionFactor
-
-			if pData.kind == "object" then
-				pData.pos =
-					(pData.pos :: Vector2)
-					+ pData.vel * fixedDt
-
-			elseif pData.kind == "segment" then
-				local delta =
-					pData.vel * fixedDt
-
-				pData.a =
-					(pData.a :: Vector2)
-					+ delta
-
-				pData.b =
-					(pData.b :: Vector2)
-					+ delta
-			end
-
-			if pData.isKicking then
-				PhysicsEngine.tryKick(
-					pData,
-					kickableObjects,
-					kickPhys,
-					currentTick
-				)
-			end
-
-			updatePlayerBroadphase(
-				broadphase,
-				pData
-			)
-		end
-	end
-
-	------------------------------------------------
-	-- SEGMENTS
-	------------------------------------------------
-
-	for _, segment in ipairs(segments) do
-		if segment.isStatic == false then
-			local damping =
-				segment.damping or 0.98
-
-			segment.vel =
-				(segment.vel or Vector2.zero)
-				* damping
-
-			segment.angularVelocity =
-				(segment.angularVelocity or 0)
-				* damping
-
-			local delta =
-				segment.vel * fixedDt
-
-			segment.a += delta
-			segment.b += delta
-
-			integrateSegmentRotation(
-				segment,
-				fixedDt
-			)
-
-			updateSegmentBroadphase(
-				broadphase,
-				segment
-			)
-		end
-	end
-
-	------------------------------------------------
-	-- FIXED SUBSTEPS
-	------------------------------------------------
-
-	-- Mantém o custo do solver estável.
-	--
-	-- Antes, a quantidade de substeps dependia
-	-- da velocidade máxima dos objetos e podia
-	-- variar entre 1 e 4 durante a partida.
-	--
-	-- Agora cada tick possui sempre exatamente
-	-- 2 substeps.
-	local steps = 2
-
-	local subDt =
-		fixedDt / steps
-
-	------------------------------------------------
-	-- SIMULATION SUBSTEPS
-	------------------------------------------------
-
-	for _ = 1, steps do
-
-		------------------------------------------------
-		-- OBJECT INTEGRATION
-		------------------------------------------------
-
-		for _, object in ipairs(objects) do
-			if object.isStatic ~= true then
-				local damping =
-					object.damping or 0.98
-
-				local dampingFactor =
-					math.pow(
-						damping,
-						1 / steps
-					)
-
-				object.vel *=
-					dampingFactor
-
-				object.pos +=
-					object.vel * subDt
-
-				object.angularVelocity =
-					(object.angularVelocity or 0)
-					* dampingFactor
-
-				if object.rotationLocked ~= true then
-					object.rotation =
-						(object.rotation or 0)
-						+ (object.angularVelocity or 0)
-						* subDt
-				end
-
-				PhysicsEngine.prepareObject(
-					object
-				)
-
-				updateObjectBroadphase(
-					broadphase,
-					object
-				)
-			end
-		end
-
-		------------------------------------------------
-		-- COLLISION ITERATIONS
-		------------------------------------------------
-
-		for _ = 1, 2 do
-
-			------------------------------------------------
-			-- OBJECT VS OBJECT
-			------------------------------------------------
-
-			for idxA, objectA in ipairs(objects) do
-				local objectAABB =
-					getObjectAABB(objectA)
-
-				local nearbyObjects =
-					SpatialHash.queryCombined(
-						broadphase.staticObjectGrid,
-						broadphase.dynamicObjectGrid,
-						objectAABB
-					)
-
-				for _, entry in ipairs(nearbyObjects) do
-					local objectB =
-						entry.object
-
-					local idxB =
-						entry.index
-
-					if
-						objectB ~= objectA
-						and (
-							objectB.isStatic == true
-							or idxB > idxA
-						)
-					then
-						PhysicsEngine.resolveShapeVsShapeCollision(
-							objectA,
-							objectB
-						)
-
-						updateObjectBroadphase(
-							broadphase,
-							objectA
-						)
-
-						updateObjectBroadphase(
-							broadphase,
-							objectB
-						)
-
-						objectAABB =
-							getObjectAABB(objectA)
-					end
-				end
-			end
-
-			------------------------------------------------
-			-- OBJECT VS SEGMENT
-			------------------------------------------------
-
-			for _, object in ipairs(objects) do
-				local objectAABB =
-					getObjectAABB(object)
-
-				local nearbySegments =
-					SpatialHash.queryCombined(
-						broadphase.staticSegmentGrid,
-						broadphase.dynamicSegmentGrid,
-						objectAABB
-					)
-
-				for _, entry in ipairs(nearbySegments) do
-					local segment =
-						entry.object
-
-					PhysicsEngine.resolveShapeVsSegmentCollision(
-						object,
-						segment
-					)
-
-					updateObjectBroadphase(
-						broadphase,
-						object
-					)
-
-					updateSegmentBroadphase(
-						broadphase,
-						segment
-					)
-
-					objectAABB =
-						getObjectAABB(object)
-				end
-			end
-
-			------------------------------------------------
-			-- PLAYERS
-			------------------------------------------------
-
-			for idxA, userIdA in ipairs(sortedUserIds) do
-				local pA =
-					playersData[userIdA]
-
-				if pA then
-					local playerAABB =
-						getPlayerAABB(pA)
-
-					------------------------------------------------
-					-- PLAYER VS OBJECT
-					------------------------------------------------
-
-					local nearbyObjects =
-						SpatialHash.queryCombined(
-							broadphase.staticObjectGrid,
-							broadphase.dynamicObjectGrid,
-							playerAABB
-						)
-
-					for _, entry in ipairs(nearbyObjects) do
-						local object =
-							entry.object
-
-						resolvePlayerVsObject(
-							pA,
-							object
-						)
-
-						updatePlayerBroadphase(
-							broadphase,
-							pA
-						)
-
-						updateObjectBroadphase(
-							broadphase,
-							object
-						)
-
-						playerAABB =
-							getPlayerAABB(pA)
-					end
-
-					------------------------------------------------
-					-- PLAYER VS PLAYER
-					------------------------------------------------
-
-					local nearbyPlayers =
-						SpatialHash.query(
-							broadphase.playerGrid,
-							playerAABB
-						)
-
-					for _, entry in ipairs(nearbyPlayers) do
-						local pB =
-							entry.object
-
-						local idxB =
-							entry.index
-
-						if idxB > idxA then
-							resolvePlayerVsPlayer(
-								pA,
-								pB
-							)
-
-							updatePlayerBroadphase(
-								broadphase,
-								pA
-							)
-
-							updatePlayerBroadphase(
-								broadphase,
-								pB
-							)
-
-							playerAABB =
-								getPlayerAABB(pA)
-						end
-					end
-
-					------------------------------------------------
-					-- PLAYER VS SEGMENT
-					------------------------------------------------
-
-					local nearbySegments =
-						SpatialHash.queryCombined(
-							broadphase.staticSegmentGrid,
-							broadphase.dynamicSegmentGrid,
-							playerAABB
-						)
-
-					for _, entry in ipairs(nearbySegments) do
-						local segment =
-							entry.object
-
-						resolvePlayerVsSegment(
-							pA,
-							segment
-						)
-
-						updatePlayerBroadphase(
-							broadphase,
-							pA
-						)
-
-						updateSegmentBroadphase(
-							broadphase,
-							segment
-						)
-
-						playerAABB =
-							getPlayerAABB(pA)
-					end
-				end
-			end
-		end
-	end
+    local playerPhys =
+        gameplay.player.movement
+
+    local kickPhys =
+        gameplay.kick
+
+    PhysicsEngine.rebuildPlayerBroadphase(
+        broadphase,
+        playersData,
+        sortedUserIds
+    )
+
+    ------------------------------------------------
+    -- PLAYERS
+    ------------------------------------------------
+
+    for _, userId in ipairs(sortedUserIds) do
+        local pData =
+            playersData[userId]
+
+        if pData then
+            local decelFactor =
+                playerPhys.decelFactor
+                or 0.88
+
+            pData.vel *=
+                decelFactor
+
+            if
+                pData.input
+                and pData.input.Magnitude > 0
+            then
+                local mass =
+                    math.max(
+                        pData.mass,
+                        0.000001
+                    )
+
+                local force =
+                    pData.input.Unit
+                    * (
+                        playerPhys.accel
+                        * mass
+                    )
+
+                local acceleration =
+                    force / mass
+
+                pData.vel +=
+                    acceleration * fixedDt
+            end
+
+            local friction =
+                math.clamp(
+                    playerPhys.friction or 1,
+                    0,
+                    1
+                )
+
+            local frictionFactor =
+                math.max(
+                    0,
+                    1 - friction * fixedDt
+                )
+
+            pData.vel *=
+                frictionFactor
+
+            if pData.kind == "object" then
+                pData.pos =
+                    (pData.pos :: Vector2)
+                    + pData.vel * fixedDt
+
+            elseif pData.kind == "segment" then
+                local delta =
+                    pData.vel * fixedDt
+
+                pData.a =
+                    (pData.a :: Vector2)
+                    + delta
+
+                pData.b =
+                    (pData.b :: Vector2)
+                    + delta
+            end
+
+            if pData.isKicking then
+                PhysicsEngine.tryKick(
+                    pData,
+                    kickableObjects,
+                    kickPhys,
+                    currentTick
+                )
+            end
+
+            updatePlayerBroadphase(
+                broadphase,
+                pData
+            )
+        end
+    end
+
+    ------------------------------------------------
+    -- SEGMENTS
+    ------------------------------------------------
+
+    for _, segment in ipairs(segments) do
+        if segment.isStatic == false then
+            local damping =
+                segment.damping or 0.98
+
+            segment.vel =
+                (segment.vel or Vector2.zero)
+                * damping
+
+            segment.angularVelocity =
+                (segment.angularVelocity or 0)
+                * damping
+
+            local delta =
+                segment.vel * fixedDt
+
+            segment.a +=
+                delta
+
+            segment.b +=
+                delta
+
+            integrateSegmentRotation(
+                segment,
+                fixedDt
+            )
+
+            updateSegmentBroadphase(
+                broadphase,
+                segment
+            )
+        end
+    end
+
+    ------------------------------------------------
+    -- REUSABLE AABB BUFFERS
+    ------------------------------------------------
+
+    local objectQueryAABB: SpatialHash.AABB = {
+        minX = 0,
+        minY = 0,
+        maxX = 0,
+        maxY = 0,
+    }
+
+    local playerQueryAABB: SpatialHash.AABB = {
+        minX = 0,
+        minY = 0,
+        maxX = 0,
+        maxY = 0,
+    }
+
+    ------------------------------------------------
+    -- FIXED SUBSTEPS
+    ------------------------------------------------
+
+    local steps = 2
+
+    local subDt =
+        fixedDt / steps
+
+    for _ = 1, steps do
+
+        ------------------------------------------------
+        -- OBJECT INTEGRATION
+        ------------------------------------------------
+
+        for _, object in ipairs(objects) do
+            if object.isStatic ~= true then
+                local damping =
+                    object.damping or 0.98
+
+                local dampingFactor =
+                    math.pow(
+                        damping,
+                        1 / steps
+                    )
+
+                object.vel *=
+                    dampingFactor
+
+                object.pos +=
+                    object.vel * subDt
+
+                object.angularVelocity =
+                    (object.angularVelocity or 0)
+                    * dampingFactor
+
+                if object.rotationLocked ~= true then
+                    object.rotation =
+                        (object.rotation or 0)
+                        + (object.angularVelocity or 0)
+                        * subDt
+                end
+
+                PhysicsEngine.prepareObject(
+                    object
+                )
+
+                updateObjectBroadphase(
+                    broadphase,
+                    object
+                )
+            end
+        end
+
+        ------------------------------------------------
+        -- COLLISION ITERATIONS
+        ------------------------------------------------
+
+        for _ = 1, 2 do
+
+            ------------------------------------------------
+            -- OBJECT VS OBJECT
+            ------------------------------------------------
+
+            for idxA, objectA in ipairs(objects) do
+                getObjectAABB(
+                    objectA,
+                    objectQueryAABB
+                )
+
+                local nearbyObjects =
+                    SpatialHash.queryCombined(
+                        broadphase.staticObjectGrid,
+                        broadphase.dynamicObjectGrid,
+                        objectQueryAABB
+                    )
+
+                for _, entry in ipairs(nearbyObjects) do
+                    local objectB =
+                        entry.object
+
+                    local idxB =
+                        entry.index
+
+                    if
+                        objectB ~= objectA
+                        and (
+                            objectB.isStatic == true
+                            or idxB > idxA
+                        )
+                    then
+                        PhysicsEngine.resolveShapeVsShapeCollision(
+                            objectA,
+                            objectB
+                        )
+
+                        updateObjectBroadphase(
+                            broadphase,
+                            objectA
+                        )
+
+                        updateObjectBroadphase(
+                            broadphase,
+                            objectB
+                        )
+
+                        getObjectAABB(
+                            objectA,
+                            objectQueryAABB
+                        )
+                    end
+                end
+            end
+
+            ------------------------------------------------
+            -- OBJECT VS SEGMENT
+            ------------------------------------------------
+
+            for _, object in ipairs(objects) do
+                getObjectAABB(
+                    object,
+                    objectQueryAABB
+                )
+
+                local nearbySegments =
+                    SpatialHash.queryCombined(
+                        broadphase.staticSegmentGrid,
+                        broadphase.dynamicSegmentGrid,
+                        objectQueryAABB
+                    )
+
+                for _, entry in ipairs(nearbySegments) do
+                    local segment =
+                        entry.object
+
+                    PhysicsEngine.resolveShapeVsSegmentCollision(
+                        object,
+                        segment
+                    )
+
+                    updateObjectBroadphase(
+                        broadphase,
+                        object
+                    )
+
+                    updateSegmentBroadphase(
+                        broadphase,
+                        segment
+                    )
+
+                    getObjectAABB(
+                        object,
+                        objectQueryAABB
+                    )
+                end
+            end
+
+            ------------------------------------------------
+            -- PLAYERS
+            ------------------------------------------------
+
+            for idxA, userIdA in ipairs(sortedUserIds) do
+                local pA =
+                    playersData[userIdA]
+
+                if pA then
+                    getPlayerAABB(
+                        pA,
+                        playerQueryAABB
+                    )
+
+                    ------------------------------------------------
+                    -- PLAYER VS OBJECT
+                    ------------------------------------------------
+
+                    local nearbyObjects =
+                        SpatialHash.queryCombined(
+                            broadphase.staticObjectGrid,
+                            broadphase.dynamicObjectGrid,
+                            playerQueryAABB
+                        )
+
+                    for _, entry in ipairs(nearbyObjects) do
+                        local object =
+                            entry.object
+
+                        resolvePlayerVsObject(
+                            pA,
+                            object
+                        )
+
+                        updatePlayerBroadphase(
+                            broadphase,
+                            pA
+                        )
+
+                        updateObjectBroadphase(
+                            broadphase,
+                            object
+                        )
+
+                        getPlayerAABB(
+                            pA,
+                            playerQueryAABB
+                        )
+                    end
+
+                    ------------------------------------------------
+                    -- PLAYER VS PLAYER
+                    ------------------------------------------------
+
+                    local nearbyPlayers =
+                        SpatialHash.query(
+                            broadphase.playerGrid,
+                            playerQueryAABB
+                        )
+
+                    for _, entry in ipairs(nearbyPlayers) do
+                        local pB =
+                            entry.object
+
+                        local idxB =
+                            entry.index
+
+                        if idxB > idxA then
+                            resolvePlayerVsPlayer(
+                                pA,
+                                pB
+                            )
+
+                            updatePlayerBroadphase(
+                                broadphase,
+                                pA
+                            )
+
+                            updatePlayerBroadphase(
+                                broadphase,
+                                pB
+                            )
+
+                            getPlayerAABB(
+                                pA,
+                                playerQueryAABB
+                            )
+                        end
+                    end
+
+                    ------------------------------------------------
+                    -- PLAYER VS SEGMENT
+                    ------------------------------------------------
+
+                    local nearbySegments =
+                        SpatialHash.queryCombined(
+                            broadphase.staticSegmentGrid,
+                            broadphase.dynamicSegmentGrid,
+                            playerQueryAABB
+                        )
+
+                    for _, entry in ipairs(nearbySegments) do
+                        local segment =
+                            entry.object
+
+                        resolvePlayerVsSegment(
+                            pA,
+                            segment
+                        )
+
+                        updatePlayerBroadphase(
+                            broadphase,
+                            pA
+                        )
+
+                        updateSegmentBroadphase(
+                            broadphase,
+                            segment
+                        )
+
+                        getPlayerAABB(
+                            pA,
+                            playerQueryAABB
+                        )
+                    end
+                end
+            end
+        end
+    end
 end
 
 return PhysicsEngine
