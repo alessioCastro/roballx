@@ -6,7 +6,7 @@ export type ShapeConfig = {
 	size: Vector2,
 	color: Color3,
 	transparency: number?,
-	cornerRadius: (UDim | number)?,
+	cornerRadius: number | string?,
 	strokeWidth: number?,
 	strokeColor: Color3?,
 	rotation: number?,
@@ -34,6 +34,73 @@ function UIPrimitives.WorldToGui(
 		(guiWidth * 0.5) + worldPosition.X,
 		(guiHeight * 0.5) + worldPosition.Y
 	)
+end
+
+----------------------------------------------------
+-- CORNER RADIUS
+----------------------------------------------------
+
+local function resolveCornerRadius(
+	cornerRadius: number | string,
+	width: number,
+	height: number
+): number
+
+	if typeof(cornerRadius) == "number" then
+
+		if cornerRadius < 0 then
+			error(
+				"cornerRadius cannot be negative"
+			)
+		end
+
+		return cornerRadius
+	end
+
+	if typeof(cornerRadius) ~= "string" then
+		error(
+			"cornerRadius must be a number or percentage string"
+		)
+	end
+
+	local percentageText =
+		string.match(
+			cornerRadius,
+			"^(%d+%.?%d*)%%$"
+		)
+
+	if not percentageText then
+		error(
+			"Invalid cornerRadius '" ..
+				cornerRadius ..
+				"'. Use a number or percentage such as '50%'."
+		)
+	end
+
+	local percentage =
+		tonumber(percentageText)
+
+	if not percentage then
+		error(
+			"Invalid cornerRadius '" ..
+				cornerRadius ..
+				"'"
+		)
+	end
+
+	if percentage < 0 or percentage > 100 then
+		error(
+			"cornerRadius percentage must be between 0% and 100%"
+		)
+	end
+
+	local smallestSide =
+		math.min(
+			width,
+			height
+		)
+
+	return smallestSide * (percentage / 100)
 end
 
 ----------------------------------------------------
@@ -113,19 +180,21 @@ function UIPrimitives.CreateShape(
 
 	if config.cornerRadius then
 
+		local radius =
+			resolveCornerRadius(
+				config.cornerRadius,
+				innerWidth,
+				innerHeight
+			)
+
 		local corner =
 			Instance.new("UICorner")
 
-		if typeof(config.cornerRadius) == "UDim" then
-			corner.CornerRadius =
-				config.cornerRadius
-		else
-			corner.CornerRadius =
-				UDim.new(
-					0,
-					config.cornerRadius
-				)
-		end
+		corner.CornerRadius =
+			UDim.new(
+				0,
+				radius
+			)
 
 		corner.Parent =
 			frame
@@ -194,10 +263,7 @@ function UIPrimitives.CreateDisc(
 				fillColor,
 
 			cornerRadius =
-				UDim.new(
-					0.5,
-					0
-				),
+				"50%",
 
 			strokeWidth =
 				strokeWidth,
@@ -259,10 +325,7 @@ function UIPrimitives.CreateSegment(
 				angle,
 
 			cornerRadius =
-				UDim.new(
-					0,
-					0
-				)
+				thickness / 2
 		}
 	)
 end
