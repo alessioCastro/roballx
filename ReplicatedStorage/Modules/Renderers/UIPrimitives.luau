@@ -41,10 +41,8 @@ end
 ----------------------------------------------------
 
 local function resolveCornerRadius(
-	cornerRadius: number | string,
-	width: number,
-	height: number
-): number
+	cornerRadius: number | string
+): UDim
 
 	if typeof(cornerRadius) == "number" then
 
@@ -54,7 +52,10 @@ local function resolveCornerRadius(
 			)
 		end
 
-		return cornerRadius
+		return UDim.new(
+			0,
+			cornerRadius
+		)
 	end
 
 	if typeof(cornerRadius) ~= "string" then
@@ -94,13 +95,10 @@ local function resolveCornerRadius(
 		)
 	end
 
-	local smallestSide =
-		math.min(
-			width,
-			height
-		)
-
-	return smallestSide * (percentage / 100)
+	return UDim.new(
+		percentage / 100,
+		0
+	)
 end
 
 ----------------------------------------------------
@@ -180,20 +178,12 @@ function UIPrimitives.CreateShape(
 
 	if config.cornerRadius then
 
-		local radius =
-			resolveCornerRadius(
-				config.cornerRadius,
-				innerWidth,
-				innerHeight
-			)
-
 		local corner =
 			Instance.new("UICorner")
 
 		corner.CornerRadius =
-			UDim.new(
-				0,
-				radius
+			resolveCornerRadius(
+				config.cornerRadius
 			)
 
 		corner.Parent =
@@ -325,7 +315,7 @@ function UIPrimitives.CreateSegment(
 				angle,
 
 			cornerRadius =
-				thickness / 2
+				0
 		}
 	)
 end
