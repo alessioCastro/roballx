@@ -2975,10 +2975,7 @@ function PhysicsEngine.Step(
                     object.damping or 0.98
 
                 local dampingFactor =
-                    math.pow(
-                        damping,
-                        1 / steps
-                    )
+                    math.sqrt(damping)
 
                 object.vel *=
                     dampingFactor
@@ -2995,11 +2992,11 @@ function PhysicsEngine.Step(
                         (object.rotation or 0)
                         + (object.angularVelocity or 0)
                         * subDt
-                end
 
-                PhysicsEngine.prepareObject(
-                    object
-                )
+                    PhysicsEngine.prepareObject(
+                        object
+                    )
+                end
 
                 updateObjectBroadphase(
                     broadphase,
