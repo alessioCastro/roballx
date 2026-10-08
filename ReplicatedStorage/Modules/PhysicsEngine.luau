@@ -1357,16 +1357,16 @@ end
 function PhysicsEngine.resolveShapeVsSegmentCollision(
 	object: Object,
 	seg: Segment
-)
+): boolean
 	if not canCollide(object, seg) then
-		return
+		return false
 	end
 
 	if
 		object.isSolid == false
 		or seg.isSolid == false
 	then
-		return
+		return false
 	end
 
 	local object1, object2, objectRad =
@@ -1387,7 +1387,7 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		objectRad + segRad
 
 	if dist >= minDist then
-		return
+		return false
 	end
 
 	local delta =
@@ -1434,7 +1434,7 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		+ inverseMassSeg
 
 	if totalInverseMass <= 0 then
-		return
+		return false
 	end
 
 	local e =
@@ -1506,7 +1506,7 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		relativeVelocity:Dot(normal)
 
 	if velAlongNormal >= 0 then
-		return
+		return true
 	end
 
 	local inverseInertiaObject =
@@ -1537,7 +1537,7 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 			* inverseInertiaSeg
 
 	if denominator <= 0 then
-		return
+		return true
 	end
 
 	local impulseMagnitude =
@@ -1571,6 +1571,8 @@ function PhysicsEngine.resolveShapeVsSegmentCollision(
 		rSeg,
 		-impulse
 	)
+
+	return true
 end
 
 ----------------------------------------------------
@@ -2065,19 +2067,21 @@ end
 local function resolvePlayerVsObject(
 	player: PlayerObject,
 	object: Object
-)
+): boolean
 	if player.kind == "object" then
-		PhysicsEngine.resolveShapeVsShapeCollision(
+		return PhysicsEngine.resolveShapeVsShapeCollision(
 			playerAsObject(player) :: Object,
 			object
 		)
 
 	elseif player.kind == "segment" then
-		PhysicsEngine.resolveShapeVsSegmentCollision(
+		return PhysicsEngine.resolveShapeVsSegmentCollision(
 			object,
 			playerAsSegment(player) :: Segment
 		)
 	end
+
+	return false
 end
 
 ----------------------------------------------------
@@ -3101,25 +3105,28 @@ function PhysicsEngine.Step(
                     local segment =
                         entry.object
 
-                    PhysicsEngine.resolveShapeVsSegmentCollision(
-                        object,
-                        segment
-                    )
+                    local collided =
+						PhysicsEngine.resolveShapeVsSegmentCollision(
+							object,
+							segment
+						)
 
-                    updateObjectBroadphase(
-                        broadphase,
-                        object
-                    )
+					if collided then
+						updateObjectBroadphase(
+							broadphase,
+							object
+						)
 
-                    updateSegmentBroadphase(
-                        broadphase,
-                        segment
-                    )
+						updateSegmentBroadphase(
+							broadphase,
+							segment
+						)
 
-                    getObjectAABB(
-                        object,
-                        objectQueryAABB
-                    )
+						getObjectAABB(
+							object,
+							objectQueryAABB
+						)
+					end
                 end
             end
 
@@ -3141,37 +3148,40 @@ function PhysicsEngine.Step(
                     -- PLAYER VS OBJECT
                     ------------------------------------------------
 
-                    local nearbyObjects =
-                        SpatialHash.queryCombined(
-                            broadphase.staticObjectGrid,
-                            broadphase.dynamicObjectGrid,
-                            playerQueryAABB
-                        )
+					local nearbyObjects =
+						SpatialHash.queryCombined(
+							broadphase.staticObjectGrid,
+							broadphase.dynamicObjectGrid,
+							playerQueryAABB
+						)
 
-                    for _, entry in ipairs(nearbyObjects) do
-                        local object =
-                            entry.object
+					for _, entry in ipairs(nearbyObjects) do
+						local object =
+							entry.object
 
-                        resolvePlayerVsObject(
-                            pA,
-                            object
-                        )
+						local collided =
+							resolvePlayerVsObject(
+								pA,
+								object
+							)
 
-                        updatePlayerBroadphase(
-                            broadphase,
-                            pA
-                        )
+						if collided then
+							updatePlayerBroadphase(
+								broadphase,
+								pA
+							)
 
-                        updateObjectBroadphase(
-                            broadphase,
-                            object
-                        )
+							updateObjectBroadphase(
+								broadphase,
+								object
+							)
 
-                        getPlayerAABB(
-                            pA,
-                            playerQueryAABB
-                        )
-                    end
+							getPlayerAABB(
+								pA,
+								playerQueryAABB
+							)
+						end
+					end
 
                     ------------------------------------------------
                     -- PLAYER VS PLAYER
