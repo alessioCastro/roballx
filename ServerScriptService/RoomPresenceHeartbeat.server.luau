@@ -9,6 +9,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local TeleportService = game:GetService("TeleportService")
+local MatchControl = require(
+	ServerScriptService:WaitForChild("Modules"):WaitForChild("MatchControl")
+)
 
 local GAME_PLACE_ID = game.PlaceId
 local RoomsMap = MemoryStoreService:GetSortedMap("GlobalRoomsList")
@@ -96,14 +99,13 @@ local BanPlayerRF = getOrCreateRemoteFunction("BanPlayer")
 local TransferHostRF = getOrCreateRemoteFunction("TransferHost")
 local GetRoomManagementRF = getOrCreateRemoteFunction("GetRoomManagement")
 local RoomManagementUpdatedRE = getOrCreateRemoteEvent("RoomManagementUpdated")
-
-local SetPlayerTeamRF =
-	getOrCreateRemoteFunction("SetPlayerTeam")
-
+local SetPlayerTeamRF = getOrCreateRemoteFunction("SetPlayerTeam")
 local setPlayerTeamRequest =
 	ServerScriptService:WaitForChild(
 		"SetPlayerTeamRequest"
 	) :: BindableFunction
+local MatchControlRequestRF = getOrCreateRemoteFunction("MatchControlRequest")
+local MatchStateUpdatedRE = getOrCreateRemoteEvent("MatchStateUpdated")
 
 local function retryMemoryStore<T>(label: string, operation: () -> T): (boolean, T?)
 	for attempt = 1, MAX_MEMORYSTORE_ATTEMPTS do
@@ -201,16 +203,20 @@ end
 
 local function getManagementPayload(): { [string]: unknown }?
 	local room = activeRoom
+
 	if room == nil then
 		return nil
 	end
+
 	return {
 		RoomId = room.Id,
 		RoomCode = room.RoomCode,
+		RoomName = room.Name,
 		HostUserId = room.HostUserId,
 		HostName = room.HostName,
 		AllowHostMigration = room.AllowHostMigration,
 		Players = getPlayerSummaries(),
+		MatchState = MatchControl.GetState(),
 	}
 end
 
@@ -436,6 +442,55 @@ local function validateHostRequest(requester: Player): (RoomRecord?, string?)
 		return nil, "Apenas o host pode usar esta acao."
 	end
 	return room, nil
+end
+
+MatchControlRequestRF.OnServerInvoke = function(
+	requester: Player,
+	action: unknown,
+	timeLimit: unknown?,
+	scoreLimit: unknown?
+): (boolean, unknown)
+	local room, authorizationError = validateHostRequest(requester)
+
+	if room == nil then
+		return false, authorizationError or "Ação não autorizada."
+	end
+
+	if typeof(action) ~= "string" then
+		return false, "Ação inválida."
+	end
+
+	local success: boolean
+	local message: string
+
+	if action == "SetSettings" then
+		success, message = MatchControl.SetSettings(
+			timeLimit,
+			scoreLimit
+		)
+	elseif action == "Start" then
+		success, message = MatchControl.Start()
+	elseif action == "Stop" then
+		success, message = MatchControl.Stop()
+	elseif action == "TogglePause" then
+		success, message = MatchControl.TogglePause()
+	else
+		return false, "Comando de partida desconhecido."
+	end
+
+	if success then
+		local payload = getManagementPayload()
+
+		if payload ~= nil then
+			RoomManagementUpdatedRE:FireAllClients(payload)
+		end
+
+		MatchStateUpdatedRE:FireAllClients(
+			MatchControl.GetState()
+		)
+	end
+
+	return success, message
 end
 
 local function validateTarget(targetUserId: unknown, hostUserId: number): (Player?, string?)
