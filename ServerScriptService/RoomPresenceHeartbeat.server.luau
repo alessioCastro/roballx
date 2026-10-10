@@ -7,6 +7,7 @@
 local MemoryStoreService = game:GetService("MemoryStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local TeleportService = game:GetService("TeleportService")
 
 local GAME_PLACE_ID = game.PlaceId
@@ -50,6 +51,7 @@ type PlayerSummary = {
 	Name: string,
 	IsHost: boolean,
 	JoinOrder: number,
+	TeamKey: string,
 }
 
 local IS_ROOM_SERVER = game.PrivateServerId ~= "" and game.VIPServerOwnerId == 0
@@ -94,6 +96,14 @@ local BanPlayerRF = getOrCreateRemoteFunction("BanPlayer")
 local TransferHostRF = getOrCreateRemoteFunction("TransferHost")
 local GetRoomManagementRF = getOrCreateRemoteFunction("GetRoomManagement")
 local RoomManagementUpdatedRE = getOrCreateRemoteEvent("RoomManagementUpdated")
+
+local SetPlayerTeamRF =
+	getOrCreateRemoteFunction("SetPlayerTeam")
+
+local setPlayerTeamRequest =
+	ServerScriptService:WaitForChild(
+		"SetPlayerTeamRequest"
+	) :: BindableFunction
 
 local function retryMemoryStore<T>(label: string, operation: () -> T): (boolean, T?)
 	for attempt = 1, MAX_MEMORYSTORE_ATTEMPTS do
@@ -174,6 +184,9 @@ local function getPlayerSummaries(): { PlayerSummary }
 				-- Nunca envie math.huge pelo RemoteEvent: numeros infinitos nao sao
 				-- serializaveis em todos os caminhos de replicacao do Roblox.
 				JoinOrder = joinOrderByUserId[player.UserId] or 0,
+				TeamKey = tostring(
+					player:GetAttribute("GameTeam") or "Spectators"
+				),
 			})
 		end
 	end
@@ -479,6 +492,81 @@ BanPlayerRF.OnServerInvoke = function(requester: Player, targetUserId: unknown):
 		return false, "Banimento salvo, mas o teleporte falhou: " .. teleportMessage
 	end
 	return true, teleportMessage
+end
+
+
+SetPlayerTeamRF.OnServerInvoke = function(
+	requester: Player,
+	targetUserId: unknown,
+	teamKey: unknown
+): (boolean, string)
+
+	local room, authorizationError =
+		validateHostRequest(requester)
+
+	if room == nil then
+		return false,
+			authorizationError
+				or "Ação não autorizada."
+	end
+
+	if typeof(targetUserId) ~= "number"
+		or targetUserId ~= math.floor(targetUserId)
+	then
+		return false, "Jogador inválido."
+	end
+
+	if typeof(teamKey) ~= "string"
+		or (
+			teamKey ~= "Spectators"
+			and teamKey ~= "Team1"
+			and teamKey ~= "Team2"
+		)
+	then
+		return false, "Equipe inválida."
+	end
+
+	local target =
+		Players:GetPlayerByUserId(targetUserId)
+
+	if not target or returningToLobby[targetUserId] then
+		return false, "Jogador não está mais na sala."
+	end
+
+	if isPlayerBanned(room, targetUserId) then
+		return false, "Jogador está banido desta sala."
+	end
+
+	local callOk, changed, message = pcall(function()
+		return setPlayerTeamRequest:Invoke(
+			targetUserId,
+			teamKey
+		)
+	end)
+
+	if not callOk then
+		warn(
+			"[RoomHeartbeat] Falha ao alterar equipe: "
+				.. tostring(changed)
+		)
+
+		return false,
+			"Erro interno ao alterar a equipe."
+	end
+
+	if changed ~= true then
+		return false,
+			if typeof(message) == "string"
+				then message
+				else "Não foi possível alterar a equipe."
+	end
+
+	broadcastManagementState()
+
+	return true,
+		if typeof(message) == "string"
+			then message
+			else "Equipe atualizada."
 end
 
 TransferHostRF.OnServerInvoke = function(requester: Player, targetUserId: unknown): (boolean, string)
