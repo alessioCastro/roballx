@@ -55,7 +55,22 @@ if inReservedServer == nil then
 	inReservedServer = ReplicatedStorage:GetAttribute("IsRoomServer")
 end
 
---if not inReservedServer then return end
+if not inReservedServer then return end
+
+----------------------------------------------------
+-- ESTADO DA PARTIDA
+----------------------------------------------------
+
+local matchIsRunning =
+	inReservedServer ~= true
+	or ReplicatedStorage:GetAttribute("MatchStatus") == "Running"
+
+ReplicatedStorage:GetAttributeChangedSignal("MatchStatus"):Connect(function()
+	if inReservedServer == true then
+		matchIsRunning =
+			ReplicatedStorage:GetAttribute("MatchStatus") == "Running"
+	end
+end)
 
 ----------------------------------------------------
 -- REFERÊNCIAS
@@ -1647,118 +1662,97 @@ local lastSentKickState =
 -- SIMULAÇÃO
 ----------------------------------------------------
 
-RunService.Heartbeat:Connect(
-	function(dt)
+RunService.Heartbeat:Connect(function(dt)
+	------------------------------------------------
+	-- ESTADO DA PARTIDA
+	------------------------------------------------
 
-		------------------------------------------------
-		-- INPUT
-		------------------------------------------------
-
-		currentMoveVector,
-		currentIsKicking =
-			InputModule.GetInput()
-
-		------------------------------------------------
-		-- FIXED TIMESTEP
-		------------------------------------------------
-
-		accumulator +=
-			math.min(
-				dt,
-				0.1
-			)
-
-		while accumulator >= FIXED_DT do
-
-			------------------------------------------------
-			-- CAPTURAR ESTADO ANTERIOR AO STEP
-			------------------------------------------------
-
-			captureRenderState()
-
-			------------------------------------------------
-			-- INPUT DO TICK
-			------------------------------------------------
-
-			local inputData:
-				InputBuffer.InputData = {
-
-					moveX =
-						currentMoveVector.X,
-
-					moveY =
-						currentMoveVector.Y,
-
-					kick =
-						currentIsKicking
-				}
-
-			localInputBuffer:setLocal(
-				localTick,
-				inputData
-			)
-
-			applyInputsForTick(
-				localTick
-			)
-
-			------------------------------------------------
-			-- SIMULAÇÃO
-			------------------------------------------------
-
-			PhysicsEngine.Step(
-				playersData,
-				sortedUserIds,
-				objects,
-				segments,
-				broadphase,
-				currentMap.gameplay,
-				kickableObjects,
-				FIXED_DT,
-				localTick
-			)
-
-			localTick +=
-				1
-
-			accumulator -=
-				FIXED_DT
-		end
-
-		------------------------------------------------
-		-- ENVIO DE INPUT
-		------------------------------------------------
-
-		local moveX =
-			currentMoveVector.X
-
-		local moveY =
-			currentMoveVector.Y
-
-		if
-			moveX ~= lastSentMoveX
-			or moveY ~= lastSentMoveY
-			or currentIsKicking
-			~= lastSentKickState
-		then
-
-			lastSentMoveX =
-				moveX
-
-			lastSentMoveY =
-				moveY
-
-			lastSentKickState =
-				currentIsKicking
-
-			gameInputEvent:FireServer(
-				localTick,
-				currentMoveVector,
-				currentIsKicking
-			)
-		end
+	if inReservedServer == true and not matchIsRunning then
+		accumulator = 0
+		currentMoveVector = Vector2.zero
+		currentIsKicking = false
+		return
 	end
-)
+
+	------------------------------------------------
+	-- INPUT
+	------------------------------------------------
+
+	currentMoveVector, currentIsKicking =
+		InputModule.GetInput()
+
+	------------------------------------------------
+	-- FIXED TIMESTEP
+	------------------------------------------------
+
+	accumulator += math.min(dt, 0.1)
+
+	while accumulator >= FIXED_DT do
+		------------------------------------------------
+		-- CAPTURAR ESTADO ANTERIOR AO STEP
+		------------------------------------------------
+
+		captureRenderState()
+
+		------------------------------------------------
+		-- INPUT DO TICK
+		------------------------------------------------
+
+		local inputData: InputBuffer.InputData = {
+			moveX = currentMoveVector.X,
+			moveY = currentMoveVector.Y,
+			kick = currentIsKicking,
+		}
+
+		localInputBuffer:setLocal(
+			localTick,
+			inputData
+		)
+
+		applyInputsForTick(localTick)
+
+		------------------------------------------------
+		-- SIMULAÇÃO
+		------------------------------------------------
+
+		PhysicsEngine.Step(
+			playersData,
+			sortedUserIds,
+			objects,
+			segments,
+			broadphase,
+			currentMap.gameplay,
+			kickableObjects,
+			FIXED_DT,
+			localTick
+		)
+
+		localTick += 1
+		accumulator -= FIXED_DT
+	end
+
+	------------------------------------------------
+	-- ENVIO DE INPUT
+	------------------------------------------------
+
+	local moveX = currentMoveVector.X
+	local moveY = currentMoveVector.Y
+
+	if moveX ~= lastSentMoveX
+		or moveY ~= lastSentMoveY
+		or currentIsKicking ~= lastSentKickState
+	then
+		lastSentMoveX = moveX
+		lastSentMoveY = moveY
+		lastSentKickState = currentIsKicking
+
+		gameInputEvent:FireServer(
+			localTick,
+			currentMoveVector,
+			currentIsKicking
+		)
+	end
+end)
 
 local function worldToGui(
 	worldPosition: Vector2
