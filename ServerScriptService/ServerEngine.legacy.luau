@@ -1249,6 +1249,48 @@ local function setPlayerTeam(
 end
 
 ----------------------------------------------------
+-- SOLICITAÇÕES DE MUDANÇA DE EQUIPE
+----------------------------------------------------
+
+local setPlayerTeamRequest =
+	script.Parent:FindFirstChild("SetPlayerTeamRequest")
+
+if setPlayerTeamRequest == nil then
+	local bindable = Instance.new("BindableFunction")
+	bindable.Name = "SetPlayerTeamRequest"
+	bindable.Parent = script.Parent
+	setPlayerTeamRequest = bindable
+end
+
+local teamRequestFunction =
+	setPlayerTeamRequest :: BindableFunction
+
+teamRequestFunction.OnInvoke = function(
+	targetUserId: number,
+	teamKey: string
+): (boolean, string)
+
+	local target = Players:GetPlayerByUserId(targetUserId)
+
+	if not target then
+		return false, "Jogador não está mais na sala."
+	end
+
+	if teamKey ~= "Spectators"
+		and teamKey ~= "Team1"
+		and teamKey ~= "Team2"
+	then
+		return false, "Equipe inválida."
+	end
+
+	if setPlayerTeam(target, teamKey) then
+		return true, "Equipe atualizada."
+	end
+
+	return false, "Não foi possível alterar a equipe."
+end
+
+----------------------------------------------------
 -- ENTRADA: TODOS COMEÇAM COMO ESPECTADORES
 ----------------------------------------------------
 
