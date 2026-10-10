@@ -1096,69 +1096,6 @@ local function getTeamSettingsKey(
 	return nil
 end
 
-local function getClothingTemplate(
-	value: any
-): string
-	if value == nil then
-		return ""
-	end
-
-	local text = tostring(value)
-
-	if text == "" then
-		return ""
-	end
-
-	if string.find(text, "://") then
-		return text
-	end
-
-	return "rbxassetid://" .. text
-end
-
-local function applyTeamUniform(
-	plr: Player,
-	character: Model
-)
-	local teamKey = getTeamSettingsKey(plr)
-
-	if not teamKey then
-		return
-	end
-
-	local settings = TeamSettings.teams[teamKey]
-
-	if not settings or not settings.uniform then
-		return
-	end
-
-	local uniform = settings.uniform
-	local shirtTemplate = getClothingTemplate(uniform.shirt)
-	local pantsTemplate = getClothingTemplate(uniform.pants)
-
-	if shirtTemplate ~= "" then
-		local shirt = character:FindFirstChildOfClass("Shirt")
-
-		if not shirt then
-			shirt = Instance.new("Shirt")
-			shirt.Parent = character
-		end
-
-		shirt.ShirtTemplate = shirtTemplate
-	end
-
-	if pantsTemplate ~= "" then
-		local pants = character:FindFirstChildOfClass("Pants")
-
-		if not pants then
-			pants = Instance.new("Pants")
-			pants.Parent = character
-		end
-
-		pants.PantsTemplate = pantsTemplate
-	end
-end
-
 ----------------------------------------------------
 -- ATRIBUIÇÃO CONTROLADA DE EQUIPE
 ----------------------------------------------------
@@ -1239,12 +1176,6 @@ local function setPlayerTeam(
 	plr.Neutral = false
 	plr:SetAttribute("GameTeam", teamKey)
 
-	local character = plr.Character
-
-	if character then
-		applyTeamUniform(plr, character)
-	end
-
 	return true
 end
 
@@ -1295,10 +1226,6 @@ end
 ----------------------------------------------------
 
 Players.PlayerAdded:Connect(function(plr)
-	plr.CharacterAdded:Connect(function(character)
-		applyTeamUniform(plr, character)
-	end)
-
 	setPlayerTeam(plr, "Spectators")
 end)
 
