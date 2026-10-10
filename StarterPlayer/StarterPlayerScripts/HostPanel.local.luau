@@ -3,6 +3,7 @@
 -- Painel exclusivamente visual. O servidor continua sendo a autoridade para
 -- kick, ban e transferencia de host; este cliente apenas solicita as acoes.
 
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
@@ -477,9 +478,15 @@ local function renderPlayerList()
 					draggingPlayer = nil
 
 					local mousePosition = UserInputService:GetMouseLocation()
+					local topLeftInset = GuiService:GetGuiInset()
+					local viewportSize = workspace.CurrentCamera.ViewportSize
+
+					local x = mousePosition.X - topLeftInset.X
+					local y = mousePosition.Y - topLeftInset.Y
+
 					contextMenu.Position = UDim2.fromOffset(
-						math.clamp(mousePosition.X, 0, playerGui.AbsoluteSize.X - 150),
-						math.clamp(mousePosition.Y, 0, playerGui.AbsoluteSize.Y - 124)
+						math.clamp(x, 0, math.max(0, viewportSize.X - 150)),
+						math.clamp(y, 0, math.max(0, viewportSize.Y - 124))
 					)
 					contextMenu.Visible = true
 					return
@@ -529,6 +536,10 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 
 	local mousePosition = UserInputService:GetMouseLocation()
+	local topLeftInset = GuiService:GetGuiInset()
+
+	mousePosition -= topLeftInset
+
 	local targetTeam: string? = nil
 
 	for _, child in ipairs(playerList:GetChildren()) do
