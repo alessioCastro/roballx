@@ -219,6 +219,56 @@ confirmBanButton.ZIndex = 21
 confirmBanButton.Parent = banConfirm
 addCorner(confirmBanButton, 6)
 
+
+local contextTarget: PlayerInfo? = nil
+
+local contextMenu = Instance.new("Frame")
+contextMenu.Name = "PlayerContextMenu"
+contextMenu.Size = UDim2.fromOffset(150, 124)
+contextMenu.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
+contextMenu.BorderSizePixel = 0
+contextMenu.Visible = false
+contextMenu.ZIndex = 30
+contextMenu.Parent = screenGui
+addCorner(contextMenu, 7)
+addStroke(contextMenu, Color3.fromRGB(85, 92, 110))
+
+local contextKickButton = Instance.new("TextButton")
+contextKickButton.Size = UDim2.new(1, -8, 0, 34)
+contextKickButton.Position = UDim2.fromOffset(4, 4)
+contextKickButton.BackgroundColor3 = Color3.fromRGB(197, 121, 46)
+contextKickButton.Text = "Kick"
+contextKickButton.TextColor3 = Color3.new(1, 1, 1)
+contextKickButton.TextSize = 13
+contextKickButton.Font = Enum.Font.GothamBold
+contextKickButton.ZIndex = 31
+contextKickButton.Parent = contextMenu
+addCorner(contextKickButton, 5)
+
+local contextBanButton = Instance.new("TextButton")
+contextBanButton.Size = UDim2.new(1, -8, 0, 34)
+contextBanButton.Position = UDim2.fromOffset(4, 44)
+contextBanButton.BackgroundColor3 = Color3.fromRGB(185, 62, 62)
+contextBanButton.Text = "Ban"
+contextBanButton.TextColor3 = Color3.new(1, 1, 1)
+contextBanButton.TextSize = 13
+contextBanButton.Font = Enum.Font.GothamBold
+contextBanButton.ZIndex = 31
+contextBanButton.Parent = contextMenu
+addCorner(contextBanButton, 5)
+
+local contextHostButton = Instance.new("TextButton")
+contextHostButton.Size = UDim2.new(1, -8, 0, 34)
+contextHostButton.Position = UDim2.fromOffset(4, 84)
+contextHostButton.BackgroundColor3 = Color3.fromRGB(62, 128, 205)
+contextHostButton.Text = "Dar Host"
+contextHostButton.TextColor3 = Color3.new(1, 1, 1)
+contextHostButton.TextSize = 13
+contextHostButton.Font = Enum.Font.GothamBold
+contextHostButton.ZIndex = 31
+contextHostButton.Parent = contextMenu
+addCorner(contextHostButton, 5)
+
 local currentState: RoomManagementState? = nil
 local pendingBan: PlayerInfo? = nil
 local actionInFlight = false
@@ -414,15 +464,32 @@ local function renderPlayerList()
 			addCorner(row, 5)
 
 			row.InputBegan:Connect(function(input)
-				if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
-					return
-				end
-
 				if not isLocalHost() or actionInFlight then
 					return
 				end
 
-				draggingPlayer = playerInfo
+				if input.UserInputType == Enum.UserInputType.MouseButton2 then
+					if playerInfo.UserId == LocalPlayer.UserId then
+						return
+					end
+
+					contextTarget = playerInfo
+					draggingPlayer = nil
+
+					local mousePosition = UserInputService:GetMouseLocation()
+					contextMenu.Position = UDim2.fromOffset(
+						math.clamp(mousePosition.X, 0, playerGui.AbsoluteSize.X - 150),
+						math.clamp(mousePosition.Y, 0, playerGui.AbsoluteSize.Y - 124)
+					)
+					contextMenu.Visible = true
+					return
+				end
+
+				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+					contextMenu.Visible = false
+					contextTarget = nil
+					draggingPlayer = playerInfo
+				end
 			end)
 
 			local name = Instance.new("TextLabel")
@@ -627,6 +694,8 @@ openButton.MouseButton1Click:Connect(function()
 		return
 	end
 	panel.Visible = not panel.Visible
+	contextMenu.Visible = false
+	contextTarget = nil
 	if panel.Visible then
 		renderPlayerList()
 		requestManagementState()
@@ -637,6 +706,8 @@ closeButton.MouseButton1Click:Connect(function()
 	panel.Visible = false
 	banConfirm.Visible = false
 	pendingBan = nil
+	contextMenu.Visible = false
+	contextTarget = nil
 end)
 
 cancelBanButton.MouseButton1Click:Connect(function()
@@ -650,6 +721,36 @@ confirmBanButton.MouseButton1Click:Connect(function()
 	pendingBan = nil
 	if playerInfo ~= nil then
 		invokePlayerAction(BanPlayerRF, playerInfo, "Banir")
+	end
+end)
+
+contextKickButton.MouseButton1Click:Connect(function()
+	local playerInfo = contextTarget
+	contextTarget = nil
+	contextMenu.Visible = false
+
+	if playerInfo ~= nil then
+		invokePlayerAction(KickPlayerRF, playerInfo, "Kick")
+	end
+end)
+
+contextBanButton.MouseButton1Click:Connect(function()
+	local playerInfo = contextTarget
+	contextTarget = nil
+	contextMenu.Visible = false
+
+	if playerInfo ~= nil then
+		showBanConfirmation(playerInfo)
+	end
+end)
+
+contextHostButton.MouseButton1Click:Connect(function()
+	local playerInfo = contextTarget
+	contextTarget = nil
+	contextMenu.Visible = false
+
+	if playerInfo ~= nil then
+		invokePlayerAction(TransferHostRF, playerInfo, "Transferir host")
 	end
 end)
 
