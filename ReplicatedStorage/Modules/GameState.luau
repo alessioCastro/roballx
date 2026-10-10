@@ -310,6 +310,8 @@ function GameState.restore(
 			playersData[uId]
 
 		if p then
+			p.team = pSnap.team
+			
 			p.vel = Vector2.new(
 				pSnap.velX,
 				pSnap.velY
@@ -738,6 +740,11 @@ function GameState.restorePacked(
 				)
 
 			p.kind = kind
+
+			p.team =
+				pArr[10] == 1
+				and "Team1"
+				or "Team2"
 
 			p.vel = Vector2.new(
 				pArr[4],
