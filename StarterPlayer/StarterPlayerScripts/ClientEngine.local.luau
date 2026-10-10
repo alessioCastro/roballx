@@ -1047,6 +1047,7 @@ type PlayerRender = {
 	stroke: UIStroke?,
 	uniformFrame: Frame?,
 	kind: "object" | "segment",
+	team: string,
 	renderPos: Vector2?,
 	renderA: Vector2?,
 	renderB: Vector2?,
@@ -1227,10 +1228,6 @@ local function createPlayerRender(
 
 			local element
 
-			------------------------------------------------
-			-- FRAME
-			------------------------------------------------
-
 			if layer.type == "frame" then
 
 				local frameLayer =
@@ -1256,10 +1253,6 @@ local function createPlayerRender(
 
 				element =
 					frameLayer
-
-			------------------------------------------------
-			-- IMAGE
-			------------------------------------------------
 
 			elseif layer.type == "image" then
 
@@ -1289,10 +1282,6 @@ local function createPlayerRender(
 				element =
 					imageLayer
 			end
-
-			------------------------------------------------
-			-- CONFIGURAÇÃO DA CAMADA
-			------------------------------------------------
 
 			if element then
 
@@ -1345,10 +1334,6 @@ local function createPlayerRender(
 			end
 		end
 
-		------------------------------------------------
-		-- PLAYER RENDER
-		------------------------------------------------
-
 		return {
 
 			frame =
@@ -1362,6 +1347,9 @@ local function createPlayerRender(
 
 			kind =
 				"object",
+
+			team =
+				pData.team,
 
 			renderPos =
 				pData.pos,
@@ -1411,6 +1399,9 @@ local function createPlayerRender(
 		kind =
 			"segment",
 
+		team =
+			pData.team,
+
 		renderPos =
 			nil,
 
@@ -1424,6 +1415,75 @@ local function createPlayerRender(
 			pData.isKicking
 			or false
 	}
+end
+
+local function captureRenderState()
+
+	------------------------------------------------
+	-- PLAYERS
+	------------------------------------------------
+
+	for _, uId in ipairs(sortedUserIds) do
+
+		local pData =
+			playersData[uId]
+
+		if pData then
+
+			local render =
+				playerRenders[uId]
+
+			if not render then
+				continue
+			end
+
+			if pData.kind == "object" then
+
+				render.renderPos =
+					pData.pos
+
+			else
+
+				render.renderA =
+					pData.a
+
+				render.renderB =
+					pData.b
+			end
+		end
+	end
+
+	------------------------------------------------
+	-- DYNAMIC OBJECTS
+	------------------------------------------------
+
+	for id, render in pairs(
+		mapDynamicRenders
+	) do
+
+		local object =
+			render.object
+
+		if not object then
+			continue
+		end
+
+		if object.pos then
+
+			render.renderPos =
+				object.pos
+
+		elseif object.a
+			and object.b
+		then
+
+			render.renderA =
+				object.a
+
+			render.renderB =
+				object.b
+		end
+	end
 end
 
 ----------------------------------------------------
@@ -1610,17 +1670,27 @@ RunService.Heartbeat:Connect(
 
 		while accumulator >= FIXED_DT do
 
+			------------------------------------------------
+			-- CAPTURAR ESTADO ANTERIOR AO STEP
+			------------------------------------------------
+
+			captureRenderState()
+
+			------------------------------------------------
+			-- INPUT DO TICK
+			------------------------------------------------
+
 			local inputData:
 				InputBuffer.InputData = {
 
 					moveX =
-					currentMoveVector.X,
+						currentMoveVector.X,
 
 					moveY =
-					currentMoveVector.Y,
+						currentMoveVector.Y,
 
 					kick =
-					currentIsKicking
+						currentIsKicking
 				}
 
 			localInputBuffer:setLocal(
@@ -1631,6 +1701,10 @@ RunService.Heartbeat:Connect(
 			applyInputsForTick(
 				localTick
 			)
+
+			------------------------------------------------
+			-- SIMULAÇÃO
+			------------------------------------------------
 
 			PhysicsEngine.Step(
 				playersData,
@@ -1701,11 +1775,17 @@ end
 ----------------------------------------------------
 
 RunService.RenderStepped:Connect(
-	function(dt)
+	function()
 
-		local alpha =
-			1 - math.exp(
-				-35 * dt
+		------------------------------------------------
+		-- INTERPOLAÇÃO TEMPORAL REAL
+		------------------------------------------------
+
+		local interpAlpha =
+			math.clamp(
+				accumulator / FIXED_DT,
+				0,
+				1
 			)
 
 		local myId =
@@ -1717,7 +1797,7 @@ RunService.RenderStepped:Connect(
 
 		for _, uId in ipairs(
 			sortedUserIds
-			) do
+		) do
 
 			local pData =
 				playersData[uId]
@@ -1761,41 +1841,45 @@ RunService.RenderStepped:Connect(
 						render
 				end
 
-				local interpAlpha
+				------------------------------------------------
+				-- CASO A EQUIPE TENHA MUDADO
+				------------------------------------------------
 
-				if uId == myId then
+				if render.team ~= pData.team then
 
-					interpAlpha =
-						1 - math.exp(
-							-50 * dt
+					render.frame:Destroy()
+
+					render =
+						createPlayerRender(
+							pData
 						)
 
-				else
-
-					interpAlpha =
-						1 - math.exp(
-							-25 * dt
-						)
+					playerRenders[uId] =
+						render
 				end
 
 				------------------------------------------------
-				-- DISC / SHAPE
+				-- OBJECT
 				------------------------------------------------
 
 				if pData.kind == "object" then
 
-					local pos =
+					local currentPos =
 						pData.pos :: Vector2
 
-					render.renderPos =
-						(render.renderPos :: Vector2):Lerp(
-							pos,
+					local previousPos =
+						render.renderPos
+						or currentPos
+
+					local renderPos =
+						previousPos:Lerp(
+							currentPos,
 							interpAlpha
 						)
 
 					local guiPosition =
 						worldToGui(
-							render.renderPos :: Vector2
+							renderPos
 						)
 
 					render.frame.Position =
@@ -1806,43 +1890,47 @@ RunService.RenderStepped:Connect(
 							guiPosition.Y
 						)
 
-					render.frame.Rotation = pData.rotation or 0
+					render.frame.Rotation =
+						pData.rotation
+						or 0
 
-					------------------------------------------------
-					-- SEGMENT
-					------------------------------------------------
+				------------------------------------------------
+				-- SEGMENT
+				------------------------------------------------
 
 				else
 
-					local a =
+					local currentA =
 						pData.a :: Vector2
 
-					local b =
+					local currentB =
 						pData.b :: Vector2
 
-					render.renderA =
-						(render.renderA :: Vector2):Lerp(
-							a,
+					local previousA =
+						render.renderA
+						or currentA
+
+					local previousB =
+						render.renderB
+						or currentB
+
+					local renderA =
+						previousA:Lerp(
+							currentA,
 							interpAlpha
 						)
 
-					render.renderB =
-						(render.renderB :: Vector2):Lerp(
-							b,
+					local renderB =
+						previousB:Lerp(
+							currentB,
 							interpAlpha
 						)
-
-					local rA =
-						render.renderA :: Vector2
-
-					local rB =
-						render.renderB :: Vector2
 
 					local midPoint =
-						(rA + rB) / 2
+						(renderA + renderB) / 2
 
 					local diff =
-						rB - rA
+						renderB - renderA
 
 					local length =
 						diff.Magnitude
@@ -1915,7 +2003,7 @@ RunService.RenderStepped:Connect(
 
 		for uId, render in pairs(
 			playerRenders
-			) do
+		) do
 
 			if not playersData[uId] then
 
@@ -1932,7 +2020,7 @@ RunService.RenderStepped:Connect(
 
 		for _, render in pairs(
 			mapDynamicRenders
-			) do
+		) do
 
 			local object =
 				render.object
@@ -1940,31 +2028,27 @@ RunService.RenderStepped:Connect(
 			if object then
 
 				------------------------------------------------
-				-- DISC / SHAPE
+				-- OBJECT
 				------------------------------------------------
 
 				if object.pos then
 
-					if render.renderPos then
+					local currentPos =
+						object.pos
 
-						render.renderPos =
-							render.renderPos:Lerp(
-								object.pos,
-								alpha
-							)
-
-					else
-
-						render.renderPos =
-							object.pos
-					end
-
-					local pos =
+					local previousPos =
 						render.renderPos
+						or currentPos
+
+					local renderPos =
+						previousPos:Lerp(
+							currentPos,
+							interpAlpha
+						)
 
 					local guiPosition =
 						worldToGui(
-							pos
+							renderPos
 						)
 
 					render.frame.Position =
@@ -1975,66 +2059,52 @@ RunService.RenderStepped:Connect(
 							guiPosition.Y
 						)
 
-					------------------------------------------------
-					-- SHAPE ROTATION
-					------------------------------------------------
-
 					if object.size then
 
 						render.frame.Rotation =
-							object.rotation or 0
+							object.rotation
+							or 0
 					end
 
-					------------------------------------------------
-					-- SEGMENT
-					------------------------------------------------
+				------------------------------------------------
+				-- SEGMENT
+				------------------------------------------------
 
 				elseif object.a
 					and object.b
 				then
 
-					local simA =
+					local currentA =
 						object.a
 
-					local simB =
+					local currentB =
 						object.b
 
-					if render.renderA
-						and render.renderB
-					then
-
-						render.renderA =
-							render.renderA:Lerp(
-								simA,
-								alpha
-							)
-
-						render.renderB =
-							render.renderB:Lerp(
-								simB,
-								alpha
-							)
-
-					else
-
-						render.renderA =
-							simA
-
-						render.renderB =
-							simB
-					end
-
-					local rA =
+					local previousA =
 						render.renderA
+						or currentA
 
-					local rB =
+					local previousB =
 						render.renderB
+						or currentB
+
+					local renderA =
+						previousA:Lerp(
+							currentA,
+							interpAlpha
+						)
+
+					local renderB =
+						previousB:Lerp(
+							currentB,
+							interpAlpha
+						)
 
 					local midPoint =
-						(rA + rB) / 2
+						(renderA + renderB) / 2
 
 					local diff =
-						rB - rA
+						renderB - renderA
 
 					local length =
 						diff.Magnitude
