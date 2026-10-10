@@ -12,6 +12,10 @@ if inReservedServer == nil then
 	inReservedServer = ReplicatedStorage:GetAttribute("IsRoomServer")
 end
 
+if inReservedServer == true then
+	return
+end
+
 -- 2. ESTRUTURA BASE DA GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "RoomSystemGui"
