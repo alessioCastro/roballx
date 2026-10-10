@@ -1118,14 +1118,9 @@ end
 
 local function applyTeamUniform(
 	plr: Player,
-	character: Model
+	character: Model,
+	teamKey: string
 )
-	local teamKey = getTeamSettingsKey(plr)
-
-	if not teamKey then
-		return
-	end
-
 	local settings = TeamSettings.teams[teamKey]
 
 	if not settings or not settings.uniform then
@@ -1242,7 +1237,7 @@ local function setPlayerTeam(
 	local character = plr.Character
 
 	if character then
-		applyTeamUniform(plr, character)
+		applyTeamUniform(plr, character, teamKey)
 	end
 
 	return true
@@ -1296,7 +1291,11 @@ end
 
 Players.PlayerAdded:Connect(function(plr)
 	plr.CharacterAdded:Connect(function(character)
-		applyTeamUniform(plr, character)
+		local teamKey = plr:GetAttribute("GameTeam")
+
+		if teamKey == "Team1" or teamKey == "Team2" then
+			applyTeamUniform(plr, character, teamKey)
+		end
 	end)
 
 	setPlayerTeam(plr, "Spectators")
