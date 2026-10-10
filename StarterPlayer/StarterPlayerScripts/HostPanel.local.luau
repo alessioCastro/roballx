@@ -332,53 +332,103 @@ local function renderPlayerList()
 		return
 	end
 
-	for index, playerInfo in ipairs(state.Players) do
-		local row = Instance.new("Frame")
-		row.Name = "Player_" .. tostring(playerInfo.UserId)
-		row.Size = UDim2.new(1, 0, 0, 38)
-		row.LayoutOrder = index
-		row.BackgroundColor3 = if playerInfo.UserId == LocalPlayer.UserId
-			then Color3.fromRGB(52, 48, 35)
-			else Color3.fromRGB(45, 49, 61)
-		row.BorderSizePixel = 0
-		row.Parent = playerList
-		addCorner(row, 5)
+	local teamSettings = require(
+		ReplicatedStorage:WaitForChild("Modules"):WaitForChild("TeamSettings")
+	)
 
-		local name = Instance.new("TextLabel")
-		name.Size = if playerInfo.UserId == LocalPlayer.UserId
-			then UDim2.new(1, -20, 1, 0)
-			else UDim2.new(1, -218, 1, 0)
-		name.Position = UDim2.fromOffset(10, 0)
-		name.BackgroundTransparency = 1
-		name.Text = if playerInfo.UserId == LocalPlayer.UserId
-			then (playerInfo.Name .. "  (Você — Host)")
-			elseif playerInfo.IsHost then (playerInfo.Name .. "  (Host)")
-			else playerInfo.Name
-		name.TextColor3 = if playerInfo.UserId == LocalPlayer.UserId
-			then Color3.fromRGB(255, 220, 112)
-			else Color3.fromRGB(241, 243, 248)
-		name.TextSize = 13
-		name.TextXAlignment = Enum.TextXAlignment.Left
-		name.TextTruncate = Enum.TextTruncate.AtEnd
-		name.Font = Enum.Font.GothamMedium
-		name.Parent = row
+	local teamNames = {
+		Spectators = "Espectadores",
+		Team1 = tostring(teamSettings.teams.Team1.name),
+		Team2 = tostring(teamSettings.teams.Team2.name),
+	}
 
-		-- O proprio host nunca recebe botoes de acao, mesmo se a lista chegar com
-		-- estado defasado durante uma transferencia.
-		if playerInfo.UserId ~= LocalPlayer.UserId then
-			local kickButton = createActionButton(row, "Kick", Color3.fromRGB(197, 121, 46), UDim2.new(1, -202, 0.5, -14))
-			local banButton = createActionButton(row, "Ban", Color3.fromRGB(185, 62, 62), UDim2.new(1, -134, 0.5, -14))
-			local hostButton = createActionButton(row, "Dar Host", Color3.fromRGB(62, 128, 205), UDim2.new(1, -66, 0.5, -14))
+	local groupedPlayers: { [string]: { PlayerInfo } } = {
+		Spectators = {},
+		Team1 = {},
+		Team2 = {},
+	}
 
-			kickButton.MouseButton1Click:Connect(function()
-				invokePlayerAction(KickPlayerRF, playerInfo, "Kick")
-			end)
-			banButton.MouseButton1Click:Connect(function()
-				showBanConfirmation(playerInfo)
-			end)
-			hostButton.MouseButton1Click:Connect(function()
-				invokePlayerAction(TransferHostRF, playerInfo, "Transferir host")
-			end)
+	for _, playerInfo in ipairs(state.Players) do
+		local teamKey = playerInfo.TeamKey
+
+		if groupedPlayers[teamKey] == nil then
+			teamKey = "Spectators"
+		end
+
+		table.insert(groupedPlayers[teamKey], playerInfo)
+	end
+
+	local teamOrder = {
+		"Spectators",
+		"Team1",
+		"Team2",
+	}
+
+	local sectionOrder = 0
+
+	for _, teamKey in ipairs(teamOrder) do
+		local members = groupedPlayers[teamKey]
+		sectionOrder += 1
+
+		local section = Instance.new("Frame")
+		section.Name = "Group_" .. teamKey
+		section.Size = UDim2.new(1, 0, 0, 32 + #members * 38)
+		section.LayoutOrder = sectionOrder
+		section.BackgroundTransparency = 1
+		section.BorderSizePixel = 0
+		section.Parent = playerList
+
+		local header = Instance.new("TextLabel")
+		header.Name = "Header"
+		header.Size = UDim2.new(1, 0, 0, 28)
+		header.Position = UDim2.fromOffset(0, 0)
+		header.BackgroundColor3 = Color3.fromRGB(35, 39, 49)
+		header.BorderSizePixel = 0
+		header.Text = string.format(
+			"  %s  (%d)",
+			teamNames[teamKey],
+			#members
+		)
+		header.TextColor3 = Color3.fromRGB(255, 213, 105)
+		header.TextSize = 12
+		header.TextXAlignment = Enum.TextXAlignment.Left
+		header.Font = Enum.Font.GothamBold
+		header.Parent = section
+		addCorner(header, 5)
+
+		for memberIndex, playerInfo in ipairs(members) do
+			local row = Instance.new("Frame")
+			row.Name = "Player_" .. tostring(playerInfo.UserId)
+			row.Size = UDim2.new(1, 0, 0, 34)
+			row.Position = UDim2.fromOffset(0, 32 + (memberIndex - 1) * 38)
+			row.BackgroundColor3 =
+				if playerInfo.UserId == LocalPlayer.UserId
+				then Color3.fromRGB(64, 55, 35)
+				else Color3.fromRGB(45, 49, 61)
+			row.BorderSizePixel = 0
+			row.Parent = section
+			addCorner(row, 5)
+
+			local name = Instance.new("TextLabel")
+			name.Name = "PlayerName"
+			name.Size = UDim2.new(1, -12, 1, 0)
+			name.Position = UDim2.fromOffset(10, 0)
+			name.BackgroundTransparency = 1
+			name.Text =
+				if playerInfo.UserId == LocalPlayer.UserId
+				then playerInfo.Name .. "  (Você — Host)"
+				elseif playerInfo.IsHost
+				then playerInfo.Name .. "  (Host)"
+				else playerInfo.Name
+			name.TextColor3 =
+				if playerInfo.UserId == LocalPlayer.UserId
+				then Color3.fromRGB(255, 220, 112)
+				else Color3.fromRGB(241, 243, 248)
+			name.TextSize = 13
+			name.TextXAlignment = Enum.TextXAlignment.Left
+			name.TextTruncate = Enum.TextTruncate.AtEnd
+			name.Font = Enum.Font.GothamMedium
+			name.Parent = row
 		end
 	end
 end
