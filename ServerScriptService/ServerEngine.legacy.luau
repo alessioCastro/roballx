@@ -836,6 +836,96 @@ team2.Name = TeamSettings.teams.Team2.name
 -- CICLO DE VIDA DOS JOGADORES
 ----------------------------------------------------
 
+local function getTeamSettingsKey(
+	plr: Player
+): string?
+	if plr.Team == team1 then
+		return "Team1"
+	elseif plr.Team == team2 then
+		return "Team2"
+	end
+
+	return nil
+end
+
+local function getClothingTemplate(
+	value: any
+): string
+	if value == nil then
+		return ""
+	end
+
+	local text = tostring(value)
+
+	if text == "" then
+		return ""
+	end
+
+	if string.find(text, "://") then
+		return text
+	end
+
+	return "rbxassetid://" .. text
+end
+
+local function applyTeamUniform(
+	plr: Player,
+	character: Model
+)
+	local teamKey =
+		getTeamSettingsKey(plr)
+
+	if not teamKey then
+		return
+	end
+
+	local settings =
+		TeamSettings.teams[teamKey]
+
+	if not settings then
+		return
+	end
+
+	local uniform =
+		settings.uniform
+
+	if not uniform then
+		return
+	end
+
+	local shirtTemplate =
+		getClothingTemplate(uniform.shirt)
+
+	local pantsTemplate =
+		getClothingTemplate(uniform.pants)
+
+	if shirtTemplate ~= "" then
+		local shirt =
+			character:FindFirstChildOfClass("Shirt")
+
+		if not shirt then
+			shirt = Instance.new("Shirt")
+			shirt.Parent = character
+		end
+
+		shirt.ShirtTemplate =
+			shirtTemplate
+	end
+
+	if pantsTemplate ~= "" then
+		local pants =
+			character:FindFirstChildOfClass("Pants")
+
+		if not pants then
+			pants = Instance.new("Pants")
+			pants.Parent = character
+		end
+
+		pants.PantsTemplate =
+			pantsTemplate
+	end
+end
+
 Players.PlayerAdded:Connect(function(plr)
 	local isTeam1 =
 		(#Players:GetPlayers() % 2 ~= 0)
@@ -852,6 +942,13 @@ Players.PlayerAdded:Connect(function(plr)
 
 	plr.Team = robloxTeam
 	plr.Neutral = false
+
+	plr.CharacterAdded:Connect(function(character)
+		applyTeamUniform(
+			plr,
+			character
+		)
+	end)
 
 	local spawnIndex =
 		getNextSpawnIndex(team)
