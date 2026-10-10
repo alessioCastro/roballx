@@ -1,7 +1,8 @@
+
 --!strict
 -- HostPanel.local.luau
--- Painel exclusivamente visual. O servidor continua sendo a autoridade para
--- kick, ban e transferencia de host; este cliente apenas solicita as acoes.
+-- Painel unificado da sala.
+-- O servidor permanece como autoridade para equipes, moderacao e partida.
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
@@ -9,17 +10,37 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- O mesmo lugar e usado para lobby e partidas. Nao criamos UI de moderacao no
--- lobby, nem esperamos os remotes exclusivos de uma partida nele.
 local isRoomServer = ReplicatedStorage:GetAttribute("IsRoomServer")
 if isRoomServer == nil then
 	ReplicatedStorage:GetAttributeChangedSignal("IsRoomServer"):Wait()
 	isRoomServer = ReplicatedStorage:GetAttribute("IsRoomServer")
 end
+
 if isRoomServer ~= true then
 	return
 end
+
+local RoomController = require(
+	ReplicatedStorage:WaitForChild("Modules"):WaitForChild("RoomController")
+)
+
+local TeamSettings = require(
+	ReplicatedStorage:WaitForChild("Modules"):WaitForChild("TeamSettings")
+)
+
+local roomRemotes =
+	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
+
+local KickPlayerRF = roomRemotes:WaitForChild("KickPlayer") :: RemoteFunction
+local BanPlayerRF = roomRemotes:WaitForChild("BanPlayer") :: RemoteFunction
+local TransferHostRF = roomRemotes:WaitForChild("TransferHost") :: RemoteFunction
+local GetRoomManagementRF = roomRemotes:WaitForChild("GetRoomManagement") :: RemoteFunction
+local RoomManagementUpdatedRE = roomRemotes:WaitForChild("RoomManagementUpdated") :: RemoteEvent
+local SetPlayerTeamRF = roomRemotes:WaitForChild("SetPlayerTeam") :: RemoteFunction
+local MatchControlRequestRF = roomRemotes:WaitForChild("MatchControlRequest") :: RemoteFunction
+local MatchStateUpdatedRE = roomRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
 
 type PlayerInfo = {
 	UserId: number,
@@ -29,43 +50,86 @@ type PlayerInfo = {
 	TeamKey: string,
 }
 
-type RoomManagementState = {
+type MatchState = {
+	Status: string,
+	TimeLimit: number,
+	ScoreLimit: number,
+	ElapsedSeconds: number,
+	RemainingSeconds: number?,
+}
+
+type RoomState = {
 	RoomId: string,
 	RoomCode: string,
+	RoomName: string,
 	HostUserId: number,
 	HostName: string,
 	AllowHostMigration: boolean,
 	Players: { PlayerInfo },
+	MatchState: MatchState?,
 }
 
-local roomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
-
--- O backend atual usa RemoteFunctions porque cada acao devolve sucesso/erro ao
--- host. RoomManagementUpdated e um RemoteEvent de atualizacao em tempo real.
-local KickPlayerRF = roomRemotes:WaitForChild("KickPlayer") :: RemoteFunction
-local BanPlayerRF = roomRemotes:WaitForChild("BanPlayer") :: RemoteFunction
-local TransferHostRF = roomRemotes:WaitForChild("TransferHost") :: RemoteFunction
-local GetRoomManagementRF = roomRemotes:WaitForChild("GetRoomManagement") :: RemoteFunction
-local RoomManagementUpdatedRE = roomRemotes:WaitForChild("RoomManagementUpdated") :: RemoteEvent
-local SetPlayerTeamRF = roomRemotes:WaitForChild("SetPlayerTeam") :: RemoteFunction
-
-local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 local previousGui = playerGui:FindFirstChild("HostPanelGui")
-if previousGui ~= nil then
+if previousGui then
 	previousGui:Destroy()
 end
 
-local function addCorner(parent: Instance, radius: number)
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
-	corner.Parent = parent
+local function corner(parent: Instance, radius: number)
+	local value = Instance.new("UICorner")
+	value.CornerRadius = UDim.new(0, radius)
+	value.Parent = parent
 end
 
-local function addStroke(parent: Instance, color: Color3)
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = color
-	stroke.Thickness = 1
-	stroke.Parent = parent
+local function stroke(parent: Instance, color: Color3)
+	local value = Instance.new("UIStroke")
+	value.Color = color
+	value.Thickness = 1
+	value.Parent = parent
+end
+
+local function makeButton(
+	parent: Instance,
+	name: string,
+	text: string,
+	size: UDim2,
+	position: UDim2,
+	color: Color3
+): TextButton
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Size = size
+	button.Position = position
+	button.BackgroundColor3 = color
+	button.BorderSizePixel = 0
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextSize = 13
+	button.Font = Enum.Font.GothamBold
+	button.AutoButtonColor = true
+	button.Parent = parent
+	corner(button, 6)
+	return button
+end
+
+local function makeLabel(
+	parent: Instance,
+	name: string,
+	text: string,
+	size: UDim2,
+	position: UDim2
+): TextLabel
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.Size = size
+	label.Position = position
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(230, 233, 240)
+	label.TextSize = 13
+	label.Font = Enum.Font.Gotham
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = parent
+	return label
 end
 
 local screenGui = Instance.new("ScreenGui")
@@ -74,75 +138,175 @@ screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 10
 screenGui.Parent = playerGui
 
-local openButton = Instance.new("TextButton")
-openButton.Name = "OpenHostPanel"
-openButton.Size = UDim2.fromOffset(138, 36)
-openButton.Position = UDim2.new(1, -153, 0, 16)
-openButton.BackgroundColor3 = Color3.fromRGB(236, 173, 44)
-openButton.Text = "PAINEL DO HOST"
-openButton.TextColor3 = Color3.fromRGB(28, 25, 19)
-openButton.TextSize = 13
-openButton.Font = Enum.Font.GothamBold
-openButton.Visible = false
-openButton.Parent = screenGui
-addCorner(openButton, 7)
-addStroke(openButton, Color3.fromRGB(255, 215, 100))
+local openButton = makeButton(
+	screenGui,
+	"OpenRoomPanel",
+	"☰  SALA",
+	UDim2.fromOffset(112, 36),
+	UDim2.new(1, -128, 0, 16),
+	Color3.fromRGB(35, 39, 49)
+)
+stroke(openButton, Color3.fromRGB(92, 101, 121))
 
 local panel = Instance.new("Frame")
-panel.Name = "HostManagementPanel"
-panel.Size = UDim2.fromOffset(490, 410)
-panel.Position = UDim2.new(0.5, -245, 0.5, -205)
+panel.Name = "RoomPanel"
+panel.Size = UDim2.fromOffset(660, 550)
+panel.Position = UDim2.new(0.5, -330, 0.5, -275)
 panel.BackgroundColor3 = Color3.fromRGB(25, 27, 34)
 panel.BorderSizePixel = 0
 panel.Visible = false
 panel.Parent = screenGui
-addCorner(panel, 10)
-addStroke(panel, Color3.fromRGB(74, 80, 96))
+corner(panel, 10)
+stroke(panel, Color3.fromRGB(74, 80, 96))
 
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -54, 0, 46)
-title.Position = UDim2.fromOffset(18, 0)
-title.BackgroundTransparency = 1
-title.Text = "PAINEL DO HOST"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextSize = 18
-title.TextXAlignment = Enum.TextXAlignment.Left
+local title = makeLabel(
+	panel,
+	"RoomTitle",
+	"SALA",
+	UDim2.new(1, -90, 0, 34),
+	UDim2.fromOffset(18, 10)
+)
 title.Font = Enum.Font.GothamBold
-title.Parent = panel
+title.TextSize = 19
 
-local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.fromOffset(30, 30)
-closeButton.Position = UDim2.new(1, -40, 0, 8)
-closeButton.BackgroundColor3 = Color3.fromRGB(60, 64, 76)
-closeButton.Text = "×"
-closeButton.TextColor3 = Color3.fromRGB(235, 235, 235)
-closeButton.TextSize = 22
-closeButton.Font = Enum.Font.GothamBold
-closeButton.Parent = panel
-addCorner(closeButton, 6)
-
-local subtitle = Instance.new("TextLabel")
-subtitle.Size = UDim2.new(1, -36, 0, 30)
-subtitle.Position = UDim2.fromOffset(18, 42)
-subtitle.BackgroundTransparency = 1
-subtitle.Text = "Gerencie os jogadores conectados à sala."
-subtitle.TextColor3 = Color3.fromRGB(172, 178, 193)
+local subtitle = makeLabel(
+	panel,
+	"RoomSubtitle",
+	"Jogadores e controles da partida",
+	UDim2.new(1, -36, 0, 20),
+	UDim2.fromOffset(18, 43)
+)
+subtitle.TextColor3 = Color3.fromRGB(155, 163, 180)
 subtitle.TextSize = 12
-subtitle.TextXAlignment = Enum.TextXAlignment.Left
-subtitle.Font = Enum.Font.Gotham
-subtitle.Parent = panel
+
+local closeButton = makeButton(
+	panel,
+	"CloseRoomPanel",
+	"×",
+	UDim2.fromOffset(32, 32),
+	UDim2.new(1, -44, 0, 9),
+	Color3.fromRGB(60, 64, 76)
+)
+closeButton.TextSize = 22
+
+-- Controles da partida.
+local controls = Instance.new("Frame")
+controls.Name = "MatchControls"
+controls.Size = UDim2.new(1, -36, 0, 112)
+controls.Position = UDim2.fromOffset(18, 73)
+controls.BackgroundColor3 = Color3.fromRGB(19, 21, 27)
+controls.BorderSizePixel = 0
+controls.Parent = panel
+corner(controls, 7)
+
+local timeLabel = makeLabel(
+	controls,
+	"TimeLimitLabel",
+	"Time Limit (min; 0 = sem limite)",
+	UDim2.fromOffset(220, 20),
+	UDim2.fromOffset(12, 8)
+)
+timeLabel.TextSize = 11
+
+local timeInput = Instance.new("TextBox")
+timeInput.Name = "TimeLimitInput"
+timeInput.Size = UDim2.fromOffset(90, 30)
+timeInput.Position = UDim2.fromOffset(12, 31)
+timeInput.BackgroundColor3 = Color3.fromRGB(44, 48, 59)
+timeInput.BorderSizePixel = 0
+timeInput.Text = "5"
+timeInput.PlaceholderText = "Minutos"
+timeInput.TextColor3 = Color3.new(1, 1, 1)
+timeInput.PlaceholderColor3 = Color3.fromRGB(160, 165, 177)
+timeInput.TextSize = 14
+timeInput.Font = Enum.Font.GothamMedium
+timeInput.ClearTextOnFocus = false
+timeInput.Parent = controls
+corner(timeInput, 5)
+
+local scoreLabel = makeLabel(
+	controls,
+	"ScoreLimitLabel",
+	"Score Limit (gols; 0 = sem limite)",
+	UDim2.fromOffset(240, 20),
+	UDim2.fromOffset(116, 8)
+)
+scoreLabel.TextSize = 11
+
+local scoreInput = Instance.new("TextBox")
+scoreInput.Name = "ScoreLimitInput"
+scoreInput.Size = UDim2.fromOffset(90, 30)
+scoreInput.Position = UDim2.fromOffset(116, 31)
+scoreInput.BackgroundColor3 = Color3.fromRGB(44, 48, 59)
+scoreInput.BorderSizePixel = 0
+scoreInput.Text = "5"
+scoreInput.PlaceholderText = "Gols"
+scoreInput.TextColor3 = Color3.new(1, 1, 1)
+scoreInput.PlaceholderColor3 = Color3.fromRGB(160, 165, 177)
+scoreInput.TextSize = 14
+scoreInput.Font = Enum.Font.GothamMedium
+scoreInput.ClearTextOnFocus = false
+scoreInput.Parent = controls
+corner(scoreInput, 5)
+
+local saveSettingsButton = makeButton(
+	controls,
+	"SaveMatchSettings",
+	"Salvar",
+	UDim2.fromOffset(86, 30),
+	UDim2.fromOffset(220, 31),
+	Color3.fromRGB(66, 91, 130)
+)
+
+local startStopButton = makeButton(
+	controls,
+	"StartStopMatch",
+	"Iniciar",
+	UDim2.fromOffset(105, 34),
+	UDim2.new(1, -235, 0, 30),
+	Color3.fromRGB(46, 125, 70)
+)
+
+local pauseButton = makeButton(
+	controls,
+	"PauseMatch",
+	"Pausar",
+	UDim2.fromOffset(105, 34),
+	UDim2.new(1, -120, 0, 30),
+	Color3.fromRGB(161, 113, 42)
+)
+
+local matchStatusLabel = makeLabel(
+	controls,
+	"MatchStatus",
+	"Partida parada",
+	UDim2.new(1, -24, 0, 24),
+	UDim2.fromOffset(12, 77)
+)
+matchStatusLabel.TextColor3 = Color3.fromRGB(181, 188, 204)
+matchStatusLabel.TextSize = 12
+
+local playersHeading = makeLabel(
+	panel,
+	"PlayersHeading",
+	"JOGADORES",
+	UDim2.new(1, -36, 0, 22),
+	UDim2.fromOffset(18, 193)
+)
+playersHeading.Font = Enum.Font.GothamBold
+playersHeading.TextSize = 12
 
 local playerList = Instance.new("ScrollingFrame")
 playerList.Name = "PlayerList"
-playerList.Size = UDim2.new(1, -36, 1, -132)
-playerList.Position = UDim2.fromOffset(18, 80)
+playerList.Size = UDim2.new(1, -36, 1, -264)
+playerList.Position = UDim2.fromOffset(18, 218)
 playerList.BackgroundColor3 = Color3.fromRGB(19, 21, 27)
 playerList.BorderSizePixel = 0
 playerList.CanvasSize = UDim2.fromOffset(0, 0)
 playerList.ScrollBarThickness = 6
 playerList.ScrollBarImageColor3 = Color3.fromRGB(104, 111, 132)
 playerList.Parent = panel
-addCorner(playerList, 7)
+corner(playerList, 7)
 
 local listPadding = Instance.new("UIPadding")
 listPadding.PaddingTop = UDim.new(0, 6)
@@ -155,123 +319,121 @@ local listLayout = Instance.new("UIListLayout")
 listLayout.Padding = UDim.new(0, 5)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = playerList
+
 listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-	playerList.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 12)
+	playerList.CanvasSize = UDim2.fromOffset(
+		0,
+		listLayout.AbsoluteContentSize.Y + 12
+	)
 end)
 
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -36, 0, 30)
-statusLabel.Position = UDim2.new(0, 18, 1, -39)
-statusLabel.BackgroundTransparency = 1
-statusLabel.Text = ""
-statusLabel.TextColor3 = Color3.fromRGB(184, 190, 205)
-statusLabel.TextSize = 12
-statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+local statusLabel = makeLabel(
+	panel,
+	"RoomStatus",
+	"",
+	UDim2.new(1, -210, 0, 25),
+	UDim2.new(0, 18, 1, -35)
+)
+statusLabel.TextSize = 11
 statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.Parent = panel
 
--- Confirmacao pequena e modal para banimentos, evitando um clique irreversivel.
-local banConfirm = Instance.new("Frame")
-banConfirm.Name = "BanConfirmation"
-banConfirm.Size = UDim2.fromOffset(370, 154)
-banConfirm.Position = UDim2.new(0.5, -185, 0.5, -77)
-banConfirm.BackgroundColor3 = Color3.fromRGB(39, 31, 34)
-banConfirm.BorderSizePixel = 0
-banConfirm.Visible = false
-banConfirm.ZIndex = 20
-banConfirm.Parent = screenGui
-addCorner(banConfirm, 10)
-addStroke(banConfirm, Color3.fromRGB(160, 70, 70))
+local leaveButton = makeButton(
+	panel,
+	"LeaveRoom",
+	"Voltar ao Lobby",
+	UDim2.fromOffset(160, 32),
+	UDim2.new(1, -178, 1, -39),
+	Color3.fromRGB(158, 51, 51)
+)
 
-local banConfirmText = Instance.new("TextLabel")
-banConfirmText.Size = UDim2.new(1, -34, 0, 76)
-banConfirmText.Position = UDim2.fromOffset(17, 14)
-banConfirmText.BackgroundTransparency = 1
-banConfirmText.Text = ""
-banConfirmText.TextWrapped = true
-banConfirmText.TextColor3 = Color3.fromRGB(255, 235, 235)
-banConfirmText.TextSize = 14
-banConfirmText.Font = Enum.Font.GothamMedium
-banConfirmText.ZIndex = 21
-banConfirmText.Parent = banConfirm
-
-local cancelBanButton = Instance.new("TextButton")
-cancelBanButton.Size = UDim2.fromOffset(142, 34)
-cancelBanButton.Position = UDim2.new(0, 17, 1, -48)
-cancelBanButton.BackgroundColor3 = Color3.fromRGB(73, 77, 89)
-cancelBanButton.Text = "Cancelar"
-cancelBanButton.TextColor3 = Color3.fromRGB(245, 245, 245)
-cancelBanButton.TextSize = 13
-cancelBanButton.Font = Enum.Font.GothamBold
-cancelBanButton.ZIndex = 21
-cancelBanButton.Parent = banConfirm
-addCorner(cancelBanButton, 6)
-
-local confirmBanButton = Instance.new("TextButton")
-confirmBanButton.Size = UDim2.fromOffset(182, 34)
-confirmBanButton.Position = UDim2.new(1, -199, 1, -48)
-confirmBanButton.BackgroundColor3 = Color3.fromRGB(190, 57, 57)
-confirmBanButton.Text = "Banir jogador"
-confirmBanButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-confirmBanButton.TextSize = 13
-confirmBanButton.Font = Enum.Font.GothamBold
-confirmBanButton.ZIndex = 21
-confirmBanButton.Parent = banConfirm
-addCorner(confirmBanButton, 6)
-
-
-local contextTarget: PlayerInfo? = nil
-
+-- Menu de contexto para moderação. Só é mostrado ao host.
 local contextMenu = Instance.new("Frame")
 contextMenu.Name = "PlayerContextMenu"
-contextMenu.Size = UDim2.fromOffset(150, 124)
+contextMenu.Size = UDim2.fromOffset(154, 124)
 contextMenu.BackgroundColor3 = Color3.fromRGB(30, 33, 42)
 contextMenu.BorderSizePixel = 0
 contextMenu.Visible = false
 contextMenu.ZIndex = 30
 contextMenu.Parent = screenGui
-addCorner(contextMenu, 7)
-addStroke(contextMenu, Color3.fromRGB(85, 92, 110))
+corner(contextMenu, 7)
+stroke(contextMenu, Color3.fromRGB(85, 92, 110))
 
-local contextKickButton = Instance.new("TextButton")
-contextKickButton.Size = UDim2.new(1, -8, 0, 34)
-contextKickButton.Position = UDim2.fromOffset(4, 4)
-contextKickButton.BackgroundColor3 = Color3.fromRGB(197, 121, 46)
-contextKickButton.Text = "Kick"
-contextKickButton.TextColor3 = Color3.new(1, 1, 1)
-contextKickButton.TextSize = 13
-contextKickButton.Font = Enum.Font.GothamBold
+local contextKickButton = makeButton(
+	contextMenu,
+	"KickPlayer",
+	"Kick",
+	UDim2.new(1, -8, 0, 32),
+	UDim2.fromOffset(4, 4),
+	Color3.fromRGB(173, 106, 43)
+)
 contextKickButton.ZIndex = 31
-contextKickButton.Parent = contextMenu
-addCorner(contextKickButton, 5)
 
-local contextBanButton = Instance.new("TextButton")
-contextBanButton.Size = UDim2.new(1, -8, 0, 34)
-contextBanButton.Position = UDim2.fromOffset(4, 44)
-contextBanButton.BackgroundColor3 = Color3.fromRGB(185, 62, 62)
-contextBanButton.Text = "Ban"
-contextBanButton.TextColor3 = Color3.new(1, 1, 1)
-contextBanButton.TextSize = 13
-contextBanButton.Font = Enum.Font.GothamBold
+local contextBanButton = makeButton(
+	contextMenu,
+	"BanPlayer",
+	"Banir",
+	UDim2.new(1, -8, 0, 32),
+	UDim2.fromOffset(4, 44),
+	Color3.fromRGB(174, 57, 57)
+)
 contextBanButton.ZIndex = 31
-contextBanButton.Parent = contextMenu
-addCorner(contextBanButton, 5)
 
-local contextHostButton = Instance.new("TextButton")
-contextHostButton.Size = UDim2.new(1, -8, 0, 34)
-contextHostButton.Position = UDim2.fromOffset(4, 84)
-contextHostButton.BackgroundColor3 = Color3.fromRGB(62, 128, 205)
-contextHostButton.Text = "Dar Host"
-contextHostButton.TextColor3 = Color3.new(1, 1, 1)
-contextHostButton.TextSize = 13
-contextHostButton.Font = Enum.Font.GothamBold
+local contextHostButton = makeButton(
+	contextMenu,
+	"TransferHost",
+	"Transferir host",
+	UDim2.new(1, -8, 0, 32),
+	UDim2.fromOffset(4, 84),
+	Color3.fromRGB(62, 112, 174)
+)
 contextHostButton.ZIndex = 31
-contextHostButton.Parent = contextMenu
-addCorner(contextHostButton, 5)
 
-local currentState: RoomManagementState? = nil
+local banConfirm = Instance.new("Frame")
+banConfirm.Name = "BanConfirmation"
+banConfirm.Size = UDim2.fromOffset(360, 145)
+banConfirm.Position = UDim2.new(0.5, -180, 0.5, -72)
+banConfirm.BackgroundColor3 = Color3.fromRGB(39, 31, 34)
+banConfirm.BorderSizePixel = 0
+banConfirm.Visible = false
+banConfirm.ZIndex = 40
+banConfirm.Parent = screenGui
+corner(banConfirm, 9)
+stroke(banConfirm, Color3.fromRGB(160, 70, 70))
+
+local banConfirmText = makeLabel(
+	banConfirm,
+	"BanConfirmationText",
+	"",
+	UDim2.new(1, -28, 0, 70),
+	UDim2.fromOffset(14, 8)
+)
+banConfirmText.TextWrapped = true
+banConfirmText.ZIndex = 41
+
+local cancelBanButton = makeButton(
+	banConfirm,
+	"CancelBan",
+	"Cancelar",
+	UDim2.fromOffset(130, 32),
+	UDim2.new(0, 14, 1, -42),
+	Color3.fromRGB(73, 77, 89)
+)
+cancelBanButton.ZIndex = 41
+
+local confirmBanButton = makeButton(
+	banConfirm,
+	"ConfirmBan",
+	"Confirmar ban",
+	UDim2.fromOffset(166, 32),
+	UDim2.new(1, -180, 1, -42),
+	Color3.fromRGB(190, 57, 57)
+)
+confirmBanButton.ZIndex = 41
+
+local currentState: RoomState? = nil
+local contextTarget: PlayerInfo? = nil
 local pendingBan: PlayerInfo? = nil
+local draggingPlayer: PlayerInfo? = nil
 local actionInFlight = false
 local refreshQueued = false
 local statusSequence = 0
@@ -279,8 +441,12 @@ local statusSequence = 0
 local function setStatus(message: string, isError: boolean?)
 	statusSequence += 1
 	local sequence = statusSequence
+
 	statusLabel.Text = message
-	statusLabel.TextColor3 = if isError then Color3.fromRGB(255, 113, 113) else Color3.fromRGB(184, 190, 205)
+	statusLabel.TextColor3 = if isError
+		then Color3.fromRGB(255, 113, 113)
+		else Color3.fromRGB(184, 190, 205)
+
 	if message ~= "" then
 		task.delay(4, function()
 			if statusSequence == sequence then
@@ -291,88 +457,153 @@ local function setStatus(message: string, isError: boolean?)
 end
 
 local function isLocalHost(): boolean
-	return currentState ~= nil and currentState.HostUserId == LocalPlayer.UserId
+	return currentState ~= nil
+		and currentState.HostUserId == LocalPlayer.UserId
+end
+
+local function parseMatchState(value: unknown): MatchState?
+	if type(value) ~= "table" then
+		return nil
+	end
+
+	local raw = value :: { [string]: unknown }
+
+	if type(raw.Status) ~= "string"
+		or type(raw.TimeLimit) ~= "number"
+		or type(raw.ScoreLimit) ~= "number"
+		or type(raw.ElapsedSeconds) ~= "number"
+	then
+		return nil
+	end
+
+	return {
+		Status = raw.Status,
+		TimeLimit = raw.TimeLimit,
+		ScoreLimit = raw.ScoreLimit,
+		ElapsedSeconds = raw.ElapsedSeconds,
+		RemainingSeconds = if type(raw.RemainingSeconds) == "number"
+			then raw.RemainingSeconds
+			else nil,
+	}
 end
 
 local function parsePlayerInfo(value: unknown): PlayerInfo?
 	if type(value) ~= "table" then
 		return nil
 	end
+
 	local raw = value :: { [string]: unknown }
-	if type(raw.UserId) ~= "number" or type(raw.Name) ~= "string" or type(raw.IsHost) ~= "boolean" then
+
+	if type(raw.UserId) ~= "number"
+		or type(raw.Name) ~= "string"
+		or type(raw.IsHost) ~= "boolean"
+	then
 		return nil
+	end
+
+	local teamKey = raw.TeamKey
+	if teamKey ~= "Team1"
+		and teamKey ~= "Team2"
+		and teamKey ~= "Spectators"
+	then
+		teamKey = "Spectators"
 	end
 
 	return {
 		UserId = raw.UserId,
 		Name = raw.Name,
 		IsHost = raw.IsHost,
-		JoinOrder = if type(raw.JoinOrder) == "number" then raw.JoinOrder else 0,
-		TeamKey = if raw.TeamKey == "Team1"
-			or raw.TeamKey == "Team2"
-			or raw.TeamKey == "Spectators"
-			then raw.TeamKey
-			else "Spectators",
+		JoinOrder = if type(raw.JoinOrder) == "number"
+			then raw.JoinOrder
+			else 0,
+		TeamKey = teamKey :: string,
 	}
 end
 
-local function parseManagementState(value: unknown): RoomManagementState?
+local function parseRoomState(value: unknown): RoomState?
 	if type(value) ~= "table" then
 		return nil
 	end
+
 	local raw = value :: { [string]: unknown }
+
 	if type(raw.RoomId) ~= "string"
 		or type(raw.RoomCode) ~= "string"
 		or type(raw.HostUserId) ~= "number"
 		or type(raw.HostName) ~= "string"
 		or type(raw.AllowHostMigration) ~= "boolean"
-		or type(raw.Players) ~= "table" then
+		or type(raw.Players) ~= "table"
+	then
 		return nil
 	end
 
-	local playerInfos: { PlayerInfo } = {}
-	for _, valueInList in ipairs(raw.Players :: { unknown }) do
-		local playerInfo = parsePlayerInfo(valueInList)
-		if playerInfo ~= nil then
-			table.insert(playerInfos, playerInfo)
+	local parsedPlayers: { PlayerInfo } = {}
+
+	for _, item in ipairs(raw.Players :: { unknown }) do
+		local playerInfo = parsePlayerInfo(item)
+		if playerInfo then
+			table.insert(parsedPlayers, playerInfo)
 		end
 	end
-	table.sort(playerInfos, function(left: PlayerInfo, right: PlayerInfo): boolean
-		if left.JoinOrder == right.JoinOrder then
-			return left.UserId < right.UserId
+
+	table.sort(parsedPlayers, function(a: PlayerInfo, b: PlayerInfo)
+		if a.JoinOrder == b.JoinOrder then
+			return a.UserId < b.UserId
 		end
-		return left.JoinOrder < right.JoinOrder
+		return a.JoinOrder < b.JoinOrder
 	end)
 
 	return {
 		RoomId = raw.RoomId,
 		RoomCode = raw.RoomCode,
+		RoomName = if type(raw.RoomName) == "string"
+			then raw.RoomName
+			else "Sala",
 		HostUserId = raw.HostUserId,
 		HostName = raw.HostName,
 		AllowHostMigration = raw.AllowHostMigration,
-		Players = playerInfos,
+		Players = parsedPlayers,
+		MatchState = parseMatchState(raw.MatchState),
 	}
 end
 
-local queueStateRefresh: () -> ()
-local invokePlayerAction: (RemoteFunction, PlayerInfo, string) -> ()
-local showBanConfirmation: (PlayerInfo) -> ()
+local function applyMatchState(value: unknown)
+	local parsed = parseMatchState(value)
+	if not parsed then
+		return
+	end
 
-local function createActionButton(parent: Instance, text: string, color: Color3, position: UDim2): TextButton
-	local button = Instance.new("TextButton")
-	button.Size = UDim2.fromOffset(64, 28)
-	button.Position = position
-	button.BackgroundColor3 = color
-	button.Text = text
-	button.TextColor3 = Color3.fromRGB(255, 255, 255)
-	button.TextSize = 11
-	button.Font = Enum.Font.GothamBold
-	button.Parent = parent
-	addCorner(button, 5)
-	return button
+	if currentState then
+		currentState.MatchState = parsed
+	end
+
+	timeInput.Text = tostring(parsed.TimeLimit)
+	scoreInput.Text = tostring(parsed.ScoreLimit)
+
+	local statusText = parsed.Status
+	if statusText == "Running" then
+		matchStatusLabel.Text = "Partida em andamento"
+		startStopButton.Text = "Parar"
+		pauseButton.Text = "Pausar"
+	elseif statusText == "Paused" then
+		matchStatusLabel.Text = "Partida pausada"
+		startStopButton.Text = "Parar"
+		pauseButton.Text = "Retomar"
+	else
+		matchStatusLabel.Text = "Partida parada"
+		startStopButton.Text = "Iniciar"
+		pauseButton.Text = "Pausar"
+	end
+
+	local host = isLocalHost()
+	saveSettingsButton.Visible = host
+	timeInput.TextEditable = host and parsed.Status == "Stopped"
+	scoreInput.TextEditable = host and parsed.Status == "Stopped"
+
+	startStopButton.Visible = host
+	pauseButton.Visible = host
+	saveSettingsButton.Active = host and parsed.Status == "Stopped"
 end
-
-local draggingPlayer: PlayerInfo? = nil
 
 local function renderPlayerList()
 	for _, child in ipairs(playerList:GetChildren()) do
@@ -382,51 +613,36 @@ local function renderPlayerList()
 	end
 
 	local state = currentState
-	if state == nil or not isLocalHost() then
+	if not state then
 		return
 	end
 
-	local teamSettings = require(
-		ReplicatedStorage:WaitForChild("Modules"):WaitForChild("TeamSettings")
-	)
-
 	local teamNames = {
 		Spectators = "Espectadores",
-		Team1 = tostring(teamSettings.teams.Team1.name),
-		Team2 = tostring(teamSettings.teams.Team2.name),
+		Team1 = tostring(TeamSettings.teams.Team1.name),
+		Team2 = tostring(TeamSettings.teams.Team2.name),
 	}
 
-	local groupedPlayers: { [string]: { PlayerInfo } } = {
+	local grouped: { [string]: { PlayerInfo } } = {
 		Spectators = {},
 		Team1 = {},
 		Team2 = {},
 	}
 
-	for _, playerInfo in ipairs(state.Players) do
-		local teamKey = playerInfo.TeamKey
-
-		if groupedPlayers[teamKey] == nil then
-			teamKey = "Spectators"
-		end
-
-		table.insert(groupedPlayers[teamKey], playerInfo)
+	for _, info in ipairs(state.Players) do
+		table.insert(grouped[info.TeamKey], info)
 	end
 
-	local teamOrder = {
-		"Spectators",
-		"Team1",
-		"Team2",
-	}
-
+	local draggingEnabled = isLocalHost()
 	local sectionOrder = 0
 
-	for _, teamKey in ipairs(teamOrder) do
-		local members = groupedPlayers[teamKey]
+	for _, teamKey in ipairs({ "Spectators", "Team1", "Team2" }) do
+		local members = grouped[teamKey]
 		sectionOrder += 1
 
 		local section = Instance.new("Frame")
 		section.Name = "Group_" .. teamKey
-		section.Size = UDim2.new(1, 0, 0, 32 + #members * 38)
+		section.Size = UDim2.new(1, 0, 0, 32 + #members * 36)
 		section.LayoutOrder = sectionOrder
 		section.BackgroundTransparency = 1
 		section.BorderSizePixel = 0
@@ -435,110 +651,407 @@ local function renderPlayerList()
 		local header = Instance.new("TextLabel")
 		header.Name = "Header"
 		header.Size = UDim2.new(1, 0, 0, 28)
-		header.Position = UDim2.fromOffset(0, 0)
 		header.BackgroundColor3 = Color3.fromRGB(35, 39, 49)
 		header.BorderSizePixel = 0
-		header.Text = string.format(
-			"  %s  (%d)",
-			teamNames[teamKey],
-			#members
-		)
+		header.Text = string.format("  %s  (%d)", teamNames[teamKey], #members)
 		header.TextColor3 = Color3.fromRGB(255, 213, 105)
 		header.TextSize = 12
 		header.TextXAlignment = Enum.TextXAlignment.Left
 		header.Font = Enum.Font.GothamBold
 		header.Parent = section
-		addCorner(header, 5)
+		corner(header, 5)
 
-		for memberIndex, playerInfo in ipairs(members) do
+		for memberIndex, info in ipairs(members) do
 			local row = Instance.new("Frame")
-			row.Name = "Player_" .. tostring(playerInfo.UserId)
-			row.Size = UDim2.new(1, 0, 0, 34)
-			row.Position = UDim2.fromOffset(0, 32 + (memberIndex - 1) * 38)
-			row.BackgroundColor3 =
-				if playerInfo.UserId == LocalPlayer.UserId
+			row.Name = "Player_" .. tostring(info.UserId)
+			row.Size = UDim2.new(1, 0, 0, 32)
+			row.Position = UDim2.fromOffset(0, 32 + (memberIndex - 1) * 36)
+			row.BackgroundColor3 = if info.UserId == LocalPlayer.UserId
 				then Color3.fromRGB(64, 55, 35)
 				else Color3.fromRGB(45, 49, 61)
 			row.BorderSizePixel = 0
 			row.Active = true
 			row.Parent = section
-			addCorner(row, 5)
+			corner(row, 5)
+
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Name = "PlayerName"
+			nameLabel.Size = UDim2.new(1, -16, 1, 0)
+			nameLabel.Position = UDim2.fromOffset(10, 0)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Text = if info.IsHost
+				then info.Name .. "  (Host)"
+				else info.Name
+			nameLabel.TextColor3 = if info.IsHost
+				then Color3.fromRGB(255, 220, 112)
+				else Color3.fromRGB(241, 243, 248)
+			nameLabel.TextSize = 13
+			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
+			nameLabel.Font = Enum.Font.GothamMedium
+			nameLabel.Parent = row
 
 			row.InputBegan:Connect(function(input)
-				if not isLocalHost() or actionInFlight then
-					return
-				end
-
 				if input.UserInputType == Enum.UserInputType.MouseButton2 then
-					if playerInfo.UserId == LocalPlayer.UserId then
+					if not isLocalHost()
+						or actionInFlight
+						or info.UserId == LocalPlayer.UserId
+					then
 						return
 					end
 
-					contextTarget = playerInfo
+					contextTarget = info
 					draggingPlayer = nil
 
-					local mousePosition = UserInputService:GetMouseLocation()
-					local topLeftInset = GuiService:GetGuiInset()
-					local viewportSize = workspace.CurrentCamera.ViewportSize
-
-					local x = mousePosition.X - topLeftInset.X
-					local y = mousePosition.Y - topLeftInset.Y
+					local mouse = UserInputService:GetMouseLocation()
+					local inset = GuiService:GetGuiInset()
+					local camera = workspace.CurrentCamera
+					local viewport = if camera
+						then camera.ViewportSize
+						else Vector2.new(800, 600)
 
 					contextMenu.Position = UDim2.fromOffset(
-						math.clamp(x, 0, math.max(0, viewportSize.X - 150)),
-						math.clamp(y, 0, math.max(0, viewportSize.Y - 124))
+						math.clamp(mouse.X - inset.X, 0, math.max(0, viewport.X - 154)),
+						math.clamp(mouse.Y - inset.Y, 0, math.max(0, viewport.Y - 124))
 					)
 					contextMenu.Visible = true
 					return
 				end
 
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
+				if input.UserInputType == Enum.UserInputType.MouseButton1
+					and draggingEnabled
+					and not actionInFlight
+				then
 					contextMenu.Visible = false
 					contextTarget = nil
-					draggingPlayer = playerInfo
+					draggingPlayer = info
 				end
 			end)
-
-			local name = Instance.new("TextLabel")
-			name.Name = "PlayerName"
-			name.Size = UDim2.new(1, -12, 1, 0)
-			name.Position = UDim2.fromOffset(10, 0)
-			name.BackgroundTransparency = 1
-			name.Text =
-				if playerInfo.UserId == LocalPlayer.UserId
-				then playerInfo.Name .. "  (Você — Host)"
-				elseif playerInfo.IsHost
-				then playerInfo.Name .. "  (Host)"
-				else playerInfo.Name
-			name.TextColor3 =
-				if playerInfo.UserId == LocalPlayer.UserId
-				then Color3.fromRGB(255, 220, 112)
-				else Color3.fromRGB(241, 243, 248)
-			name.TextSize = 13
-			name.TextXAlignment = Enum.TextXAlignment.Left
-			name.TextTruncate = Enum.TextTruncate.AtEnd
-			name.Font = Enum.Font.GothamMedium
-			name.Parent = row
 		end
 	end
 end
+
+local function updateHostAccess()
+	local host = isLocalHost()
+
+	saveSettingsButton.Visible = host
+	startStopButton.Visible = host
+	pauseButton.Visible = host
+
+	if not host then
+		contextMenu.Visible = false
+		banConfirm.Visible = false
+		contextTarget = nil
+		pendingBan = nil
+		draggingPlayer = nil
+	end
+
+	if currentState and currentState.MatchState then
+		applyMatchState(currentState.MatchState)
+	end
+
+	renderPlayerList()
+end
+
+local function applyRoomState(value: unknown)
+	local parsed = parseRoomState(value)
+	if not parsed then
+		return
+	end
+
+	currentState = parsed
+	title.Text = parsed.RoomName
+	subtitle.Text = string.format(
+		"Código: %s   •   Host: %s",
+		parsed.RoomCode,
+		parsed.HostName
+	)
+
+	updateHostAccess()
+end
+
+local function requestRoomState()
+	local callOk, serverOk, value = pcall(function()
+		return GetRoomManagementRF:InvokeServer()
+	end)
+
+	if not callOk then
+		setStatus("Falha de conexão ao consultar a sala.", true)
+		return
+	end
+
+	if serverOk ~= true then
+		setStatus(
+			if type(value) == "string" then value else "Não foi possível consultar a sala.",
+			true
+		)
+		return
+	end
+
+	applyRoomState(value)
+end
+
+local function queueStateRefresh()
+	if refreshQueued then
+		return
+	end
+
+	refreshQueued = true
+	task.delay(0.2, function()
+		refreshQueued = false
+		requestRoomState()
+	end)
+end
+
+local function invokeMatchAction(
+	action: string,
+	timeLimit: number?,
+	scoreLimit: number?
+)
+	if actionInFlight or not isLocalHost() then
+		return
+	end
+
+	actionInFlight = true
+
+	task.spawn(function()
+		local callOk, serverOk, response = pcall(function()
+			return MatchControlRequestRF:InvokeServer(
+				action,
+				timeLimit,
+				scoreLimit
+			)
+		end)
+
+		actionInFlight = false
+
+		if not callOk then
+			setStatus("Falha de conexão ao controlar a partida.", true)
+			return
+		end
+
+		setStatus(
+			if type(response) == "string" then response else "Comando processado.",
+			serverOk ~= true
+		)
+
+		queueStateRefresh()
+	end)
+end
+
+local function invokePlayerAction(
+	remote: RemoteFunction,
+	info: PlayerInfo,
+	actionName: string
+)
+	if actionInFlight or not isLocalHost() then
+		return
+	end
+
+	actionInFlight = true
+	contextMenu.Visible = false
+
+	task.spawn(function()
+		local callOk, serverOk, response = pcall(function()
+			return remote:InvokeServer(info.UserId)
+		end)
+
+		actionInFlight = false
+
+		if not callOk then
+			setStatus("Falha de conexão ao executar a ação.", true)
+			return
+		end
+
+		setStatus(
+			if type(response) == "string" then response else actionName .. " concluído.",
+			serverOk ~= true
+		)
+
+		queueStateRefresh()
+	end)
+end
+
+local function saveMatchSettings()
+	if not isLocalHost() then
+		return
+	end
+
+	local timeLimit = tonumber(timeInput.Text)
+	local scoreLimit = tonumber(scoreInput.Text)
+
+	if not timeLimit or not scoreLimit
+		or timeLimit ~= math.floor(timeLimit)
+		or scoreLimit ~= math.floor(scoreLimit)
+		or timeLimit < 0 or timeLimit > 120
+		or scoreLimit < 0 or scoreLimit > 99
+	then
+		setStatus("Time Limit: inteiro de 0 a 120. Score Limit: inteiro de 0 a 99.", true)
+		return
+	end
+
+	invokeMatchAction("SetSettings", timeLimit, scoreLimit)
+end
+
+local function showBanConfirmation(info: PlayerInfo)
+	if not isLocalHost() or actionInFlight then
+		return
+	end
+
+	pendingBan = info
+	banConfirmText.Text = string.format(
+		"Banir %s? O jogador será enviado ao lobby e não poderá voltar a esta sala.",
+		info.Name
+	)
+	banConfirm.Visible = true
+	contextMenu.Visible = false
+end
+
+openButton.Activated:Connect(function()
+	panel.Visible = not panel.Visible
+	contextMenu.Visible = false
+
+	if panel.Visible then
+		requestRoomState()
+	end
+end)
+
+closeButton.Activated:Connect(function()
+	panel.Visible = false
+	contextMenu.Visible = false
+	banConfirm.Visible = false
+end)
+
+UserInputService.InputBegan:Connect(function(input)
+	if input.KeyCode ~= Enum.KeyCode.Escape then
+		return
+	end
+
+	if UserInputService:GetFocusedTextBox() ~= nil then
+		return
+	end
+
+	panel.Visible = not panel.Visible
+	contextMenu.Visible = false
+	banConfirm.Visible = false
+
+	if panel.Visible then
+		requestRoomState()
+	end
+end)
+
+saveSettingsButton.Activated:Connect(saveMatchSettings)
+
+startStopButton.Activated:Connect(function()
+	local state = currentState and currentState.MatchState
+	if not state then
+		requestRoomState()
+		return
+	end
+
+	if state.Status == "Stopped" then
+		invokeMatchAction("Start")
+	else
+		invokeMatchAction("Stop")
+	end
+end)
+
+pauseButton.Activated:Connect(function()
+	local state = currentState and currentState.MatchState
+	if not state or state.Status == "Stopped" then
+		setStatus("Inicie a partida antes de pausá-la.", true)
+		return
+	end
+
+	invokeMatchAction("TogglePause")
+end)
+
+leaveButton.Activated:Connect(function()
+	if actionInFlight then
+		return
+	end
+
+	actionInFlight = true
+	setStatus("Voltando ao lobby...")
+
+	task.spawn(function()
+		local callOk, success, response = pcall(function()
+			return RoomController.LeaveRoom()
+		end)
+
+		actionInFlight = false
+
+		if not callOk then
+			setStatus("Falha de conexão ao sair da sala.", true)
+			return
+		end
+
+		if success ~= true then
+			setStatus(
+				if type(response) == "string" then response else "Não foi possível sair da sala.",
+				true
+			)
+		end
+	end)
+end)
+
+cancelBanButton.Activated:Connect(function()
+	banConfirm.Visible = false
+	pendingBan = nil
+end)
+
+confirmBanButton.Activated:Connect(function()
+	local info = pendingBan
+	pendingBan = nil
+	banConfirm.Visible = false
+
+	if info then
+		invokePlayerAction(BanPlayerRF, info, "Banir")
+	end
+end)
+
+contextKickButton.Activated:Connect(function()
+	local info = contextTarget
+	contextTarget = nil
+
+	if info then
+		invokePlayerAction(KickPlayerRF, info, "Kick")
+	end
+end)
+
+contextBanButton.Activated:Connect(function()
+	local info = contextTarget
+	contextTarget = nil
+
+	if info then
+		showBanConfirmation(info)
+	end
+end)
+
+contextHostButton.Activated:Connect(function()
+	local info = contextTarget
+	contextTarget = nil
+
+	if info then
+		invokePlayerAction(TransferHostRF, info, "Transferir host")
+	end
+end)
 
 UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
 		return
 	end
 
-	local playerInfo = draggingPlayer
+	local info = draggingPlayer
 	draggingPlayer = nil
 
-	if playerInfo == nil or not isLocalHost() or actionInFlight then
+	if not info or not isLocalHost() or actionInFlight then
 		return
 	end
 
-	local mousePosition = UserInputService:GetMouseLocation()
-	local topLeftInset = GuiService:GetGuiInset()
-
-	mousePosition -= topLeftInset
+	local mouse = UserInputService:GetMouseLocation()
+	local inset = GuiService:GetGuiInset()
+	mouse -= inset
 
 	local targetTeam: string? = nil
 
@@ -548,7 +1061,6 @@ UserInputService.InputEnded:Connect(function(input)
 		end
 
 		local teamKey = child.Name:gsub("^Group_", "")
-
 		if teamKey ~= "Spectators"
 			and teamKey ~= "Team1"
 			and teamKey ~= "Team2"
@@ -559,225 +1071,51 @@ UserInputService.InputEnded:Connect(function(input)
 		local position = child.AbsolutePosition
 		local size = child.AbsoluteSize
 
-		local inside =
-			mousePosition.X >= position.X
-			and mousePosition.X <= position.X + size.X
-			and mousePosition.Y >= position.Y
-			and mousePosition.Y <= position.Y + size.Y
-
-		if inside then
+		if mouse.X >= position.X
+			and mouse.X <= position.X + size.X
+			and mouse.Y >= position.Y
+			and mouse.Y <= position.Y + size.Y
+		then
 			targetTeam = teamKey
 			break
 		end
 	end
 
-	if targetTeam == nil or targetTeam == playerInfo.TeamKey then
+	if not targetTeam or targetTeam == info.TeamKey then
 		return
 	end
 
 	actionInFlight = true
-	setStatus("Alterando equipe de " .. playerInfo.Name .. "...")
 
 	task.spawn(function()
 		local callOk, serverOk, response = pcall(function()
-			return SetPlayerTeamRF:InvokeServer(
-				playerInfo.UserId,
-				targetTeam
-			)
+			return SetPlayerTeamRF:InvokeServer(info.UserId, targetTeam)
 		end)
 
 		actionInFlight = false
 
 		if not callOk then
 			setStatus("Falha de conexão ao alterar a equipe.", true)
-			queueStateRefresh()
-			return
-		end
-
-		local message =
-			if type(response) == "string"
-			then response
-			else "Não foi possível alterar a equipe."
-
-		if serverOk ~= true then
-			setStatus(message, true)
 		else
-			setStatus(message)
+			setStatus(
+				if type(response) == "string" then response else "Equipe atualizada.",
+				serverOk ~= true
+			)
 		end
 
 		queueStateRefresh()
 	end)
 end)
 
-local function updateHostAccess()
-	local localIsHost = isLocalHost()
-	openButton.Visible = localIsHost
-	if not localIsHost then
-		-- A transferencia de host fecha tambem qualquer confirmacao pendente no
-		-- cliente do host antigo, impedindo pedidos atrasados.
-		panel.Visible = false
-		banConfirm.Visible = false
-		pendingBan = nil
-		return
-	end
-	renderPlayerList()
-end
-
-local function applyManagementState(value: unknown)
-	local parsedState = parseManagementState(value)
-	if parsedState == nil then
-		currentState = nil
-		updateHostAccess()
-		return
-	end
-	currentState = parsedState
-	updateHostAccess()
-end
-
-local function requestManagementState()
-	local callOk, serverOk, stateOrMessage = pcall(function()
-		return GetRoomManagementRF:InvokeServer()
-	end)
-	if not callOk then
-		setStatus("Falha de conexao ao consultar a sala.", true)
-		return
-	end
-	if serverOk ~= true then
-		currentState = nil
-		updateHostAccess()
-		return
-	end
-	applyManagementState(stateOrMessage)
-end
-
-queueStateRefresh = function()
-	if refreshQueued then
-		return
-	end
-	refreshQueued = true
-	task.delay(0.2, function()
-		refreshQueued = false
-		requestManagementState()
-	end)
-end
-
-invokePlayerAction = function(remote: RemoteFunction, playerInfo: PlayerInfo, actionName: string)
-	if actionInFlight or not isLocalHost() then
-		return
-	end
-	actionInFlight = true
-	setStatus(actionName .. " em " .. playerInfo.Name .. "...")
-
-	task.spawn(function()
-		local callOk, serverOk, response = pcall(function()
-			return remote:InvokeServer(playerInfo.UserId)
-		end)
-		actionInFlight = false
-
-		if not callOk then
-			setStatus("Falha de conexao ao executar a acao.", true)
-			return
-		end
-
-		local message = if type(response) == "string" then response else "Acao concluida."
-		if serverOk ~= true then
-			setStatus(message, true)
-			queueStateRefresh()
-			return
-		end
-
-		setStatus(message)
-		queueStateRefresh()
-	end)
-end
-
-showBanConfirmation = function(playerInfo: PlayerInfo)
-	if actionInFlight or not isLocalHost() then
-		return
-	end
-	pendingBan = playerInfo
-	banConfirmText.Text = ("Tem certeza que deseja banir %s?\nEle sera enviado ao lobby e nao podera voltar a esta sala."):format(playerInfo.Name)
-	banConfirm.Visible = true
-end
-
-openButton.MouseButton1Click:Connect(function()
-	if not isLocalHost() then
-		return
-	end
-	panel.Visible = not panel.Visible
-	contextMenu.Visible = false
-	contextTarget = nil
-	if panel.Visible then
-		renderPlayerList()
-		requestManagementState()
-	end
+RoomManagementUpdatedRE.OnClientEvent:Connect(function(value: unknown)
+	applyRoomState(value)
 end)
 
-closeButton.MouseButton1Click:Connect(function()
-	panel.Visible = false
-	banConfirm.Visible = false
-	pendingBan = nil
-	contextMenu.Visible = false
-	contextTarget = nil
+MatchStateUpdatedRE.OnClientEvent:Connect(function(value: unknown)
+	applyMatchState(value)
 end)
 
-cancelBanButton.MouseButton1Click:Connect(function()
-	banConfirm.Visible = false
-	pendingBan = nil
-end)
+Players.PlayerAdded:Connect(queueStateRefresh)
+Players.PlayerRemoving:Connect(queueStateRefresh)
 
-confirmBanButton.MouseButton1Click:Connect(function()
-	local playerInfo = pendingBan
-	banConfirm.Visible = false
-	pendingBan = nil
-	if playerInfo ~= nil then
-		invokePlayerAction(BanPlayerRF, playerInfo, "Banir")
-	end
-end)
-
-contextKickButton.MouseButton1Click:Connect(function()
-	local playerInfo = contextTarget
-	contextTarget = nil
-	contextMenu.Visible = false
-
-	if playerInfo ~= nil then
-		invokePlayerAction(KickPlayerRF, playerInfo, "Kick")
-	end
-end)
-
-contextBanButton.MouseButton1Click:Connect(function()
-	local playerInfo = contextTarget
-	contextTarget = nil
-	contextMenu.Visible = false
-
-	if playerInfo ~= nil then
-		showBanConfirmation(playerInfo)
-	end
-end)
-
-contextHostButton.MouseButton1Click:Connect(function()
-	local playerInfo = contextTarget
-	contextTarget = nil
-	contextMenu.Visible = false
-
-	if playerInfo ~= nil then
-		invokePlayerAction(TransferHostRF, playerInfo, "Transferir host")
-	end
-end)
-
--- A fonte principal e o payload autoritativo do servidor. Os sinais locais sao
--- uma segunda via para atualizar a UI mesmo se o evento chegar antes deste
--- LocalScript terminar de iniciar.
-RoomManagementUpdatedRE.OnClientEvent:Connect(function(state: unknown)
-	applyManagementState(state)
-end)
-
-Players.PlayerAdded:Connect(function()
-	queueStateRefresh()
-end)
-
-Players.PlayerRemoving:Connect(function()
-	queueStateRefresh()
-end)
-
-requestManagementState()
+requestRoomState()
