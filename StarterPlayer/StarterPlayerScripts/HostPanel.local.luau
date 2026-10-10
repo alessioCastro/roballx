@@ -5,6 +5,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -320,6 +321,8 @@ local function createActionButton(parent: Instance, text: string, color: Color3,
 	return button
 end
 
+local draggingPlayer: PlayerInfo? = nil
+
 local function renderPlayerList()
 	for _, child in ipairs(playerList:GetChildren()) do
 		if child:IsA("Frame") then
@@ -406,8 +409,21 @@ local function renderPlayerList()
 				then Color3.fromRGB(64, 55, 35)
 				else Color3.fromRGB(45, 49, 61)
 			row.BorderSizePixel = 0
+			row.Active = true
 			row.Parent = section
 			addCorner(row, 5)
+
+			row.InputBegan:Connect(function(input)
+				if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+					return
+				end
+
+				if not isLocalHost() or actionInFlight then
+					return
+				end
+
+				draggingPlayer = playerInfo
+			end)
 
 			local name = Instance.new("TextLabel")
 			name.Name = "PlayerName"
@@ -432,6 +448,88 @@ local function renderPlayerList()
 		end
 	end
 end
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+
+	local playerInfo = draggingPlayer
+	draggingPlayer = nil
+
+	if playerInfo == nil or not isLocalHost() or actionInFlight then
+		return
+	end
+
+	local mousePosition = UserInputService:GetMouseLocation()
+	local targetTeam: string? = nil
+
+	for _, child in ipairs(playerList:GetChildren()) do
+		if not child:IsA("Frame") then
+			continue
+		end
+
+		local teamKey = child.Name:gsub("^Group_", "")
+
+		if teamKey ~= "Spectators"
+			and teamKey ~= "Team1"
+			and teamKey ~= "Team2"
+		then
+			continue
+		end
+
+		local position = child.AbsolutePosition
+		local size = child.AbsoluteSize
+
+		local inside =
+			mousePosition.X >= position.X
+			and mousePosition.X <= position.X + size.X
+			and mousePosition.Y >= position.Y
+			and mousePosition.Y <= position.Y + size.Y
+
+		if inside then
+			targetTeam = teamKey
+			break
+		end
+	end
+
+	if targetTeam == nil or targetTeam == playerInfo.TeamKey then
+		return
+	end
+
+	actionInFlight = true
+	setStatus("Alterando equipe de " .. playerInfo.Name .. "...")
+
+	task.spawn(function()
+		local callOk, serverOk, response = pcall(function()
+			return SetPlayerTeamRF:InvokeServer(
+				playerInfo.UserId,
+				targetTeam
+			)
+		end)
+
+		actionInFlight = false
+
+		if not callOk then
+			setStatus("Falha de conexão ao alterar a equipe.", true)
+			queueStateRefresh()
+			return
+		end
+
+		local message =
+			if type(response) == "string"
+			then response
+			else "Não foi possível alterar a equipe."
+
+		if serverOk ~= true then
+			setStatus(message, true)
+		else
+			setStatus(message)
+		end
+
+		queueStateRefresh()
+	end)
+end)
 
 local function updateHostAccess()
 	local localIsHost = isLocalHost()
