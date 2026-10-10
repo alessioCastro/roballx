@@ -9,8 +9,7 @@ local Teams = game:GetService("Teams")
 local RunService = game:GetService("RunService")
 
 local replicatedModules = ReplicatedStorage:WaitForChild("Modules")
-local replicatedGameRemotes =
-	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
+local replicatedGameRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
 local serverModules = script.Parent.Modules
 
 local MapData = require(replicatedModules:WaitForChild("MapData"))
@@ -19,9 +18,11 @@ local PhysicsEngine = require(replicatedModules:WaitForChild("PhysicsEngine"))
 local GameState = require(replicatedModules:WaitForChild("GameState"))
 local InputBuffer = require(replicatedModules:WaitForChild("InputBuffer"))
 local MatchManager = require(serverModules:WaitForChild("MatchManager"))
+local MatchControl = require(serverModules:WaitForChild("MatchControl"))
 
-local gameInputEvent =
-	replicatedGameRemotes:WaitForChild("GameInput")
+local roomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
+local matchStateUpdatedEvent = roomRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
+local gameInputEvent = replicatedGameRemotes:WaitForChild("GameInput")
 
 ----------------------------------------------------
 -- SNAPSHOT REMOTE
@@ -1329,20 +1330,55 @@ local SNAPSHOT_INTERVAL = 2
 
 local accumulator = 0
 local currentTick = 0
+local previousMatchStatus = MatchControl.GetState().Status
+
+ReplicatedStorage:SetAttribute("MatchStatus", previousMatchStatus)
 
 RunService.Heartbeat:Connect(function(dt)
-	accumulator +=
-		math.min(dt, 0.1)
+	local matchState = MatchControl.GetState()
+	local matchStatus = matchState.Status
 
-	while accumulator >= FIXED_DT do
+	------------------------------------------------
+	-- TRANSIÇÕES DE ESTADO
+	------------------------------------------------
 
+	if matchStatus ~= previousMatchStatus then
+		if matchStatus == "Running"
+			and previousMatchStatus == "Stopped"
+		then
+			-- Uma nova partida começa com a pontuação zerada.
+			MatchManager.SetState(0, 0, 0)
+		end
+
+		previousMatchStatus = matchStatus
+
+		ReplicatedStorage:SetAttribute("MatchStatus", matchStatus)
+
+		matchStateUpdatedEvent:FireAllClients(
+			MatchControl.GetState()
+		)
+	end
+
+	------------------------------------------------
+	-- PARADA OU PAUSA
+	------------------------------------------------
+
+	if matchStatus ~= "Running" then
+		accumulator = 0
+	else
+		accumulator += math.min(dt, 0.1)
+	end
+
+	local advancedThisHeartbeat = false
+
+	while accumulator >= FIXED_DT
+		and MatchControl.IsRunning()
+	do
 		------------------------------------------------
 		-- 1. INPUT
 		------------------------------------------------
 
-		applyInputsForTick(
-			currentTick
-		)
+		applyInputsForTick(currentTick)
 
 		------------------------------------------------
 		-- 2. FÍSICA
@@ -1351,15 +1387,11 @@ RunService.Heartbeat:Connect(function(dt)
 		PhysicsEngine.Step(
 			playersData,
 			sortedUserIds,
-
 			objects,
 			segments,
-
 			broadphase,
-
 			currentMap.gameplay,
 			kickableObjects,
-
 			FIXED_DT,
 			currentTick
 		)
@@ -1368,17 +1400,37 @@ RunService.Heartbeat:Connect(function(dt)
 		-- 3. GOLS
 		------------------------------------------------
 
-		MatchManager.CheckGoals(currentMap, playersData, objects, segments)
+		MatchManager.CheckGoals(
+			currentMap,
+			playersData,
+			objects,
+			segments
+		)
 
 		------------------------------------------------
-		-- 4. AVANÇAR TICK
+		-- 4. VERIFICAR LIMITES DA PARTIDA
+		------------------------------------------------
+
+		local scoreTeam1, scoreTeam2 =
+			MatchManager.GetScore()
+
+		local matchEnded, endReason =
+			MatchControl.Advance(
+				FIXED_DT,
+				scoreTeam1,
+				scoreTeam2
+			)
+
+		------------------------------------------------
+		-- 5. AVANÇAR TICK
 		------------------------------------------------
 
 		currentTick += 1
 		accumulator -= FIXED_DT
+		advancedThisHeartbeat = true
 
 		------------------------------------------------
-		-- 5. LIMPAR INPUTS ANTIGOS
+		-- 6. LIMPAR INPUTS ANTIGOS
 		------------------------------------------------
 
 		if currentTick % 30 == 0 then
@@ -1386,14 +1438,36 @@ RunService.Heartbeat:Connect(function(dt)
 				currentTick - 180
 			)
 		end
+
+		------------------------------------------------
+		-- 7. ENCERRAMENTO AUTOMÁTICO
+		------------------------------------------------
+
+		if matchEnded then
+			accumulator = 0
+
+			matchStateUpdatedEvent:FireAllClients(
+				MatchControl.GetState()
+			)
+
+			if endReason == "ScoreLimit" then
+				print("[Match] Partida encerrada: limite de gols.")
+			elseif endReason == "TimeLimit" then
+				print("[Match] Partida encerrada: limite de tempo.")
+			end
+
+			break
+		end
 	end
 
 	------------------------------------------------
-	-- 6. SNAPSHOT
+	-- 8. SNAPSHOT
 	------------------------------------------------
 
-	if
-		currentTick > 0
+	-- Só envia snapshots quando houve simulação. Isso evita
+	-- retransmitir o mesmo estado continuamente durante a pausa.
+	if advancedThisHeartbeat
+		and currentTick > 0
 		and currentTick % SNAPSHOT_INTERVAL == 0
 	then
 		local scoreRed, scoreBlue =
@@ -1402,22 +1476,15 @@ RunService.Heartbeat:Connect(function(dt)
 		local packed =
 			GameState.packLiveState(
 				currentTick,
-
 				playersData,
-
 				objects,
 				segments,
-
 				scoreRed,
 				scoreBlue,
-
 				MatchManager.GetResetCountdown(),
-
 				sortedUserIds
 			)
 
-		gameSnapshotEvent:FireAllClients(
-			packed
-		)
+		gameSnapshotEvent:FireAllClients(packed)
 	end
 end)
