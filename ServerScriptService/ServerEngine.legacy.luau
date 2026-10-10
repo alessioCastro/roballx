@@ -1056,8 +1056,18 @@ local function getPlayerSpawnPosition(
 	return getAutomaticSpawnPosition(team)
 end
 
-local team1 = Teams:WaitForChild("Team1")
-local team2 = Teams:WaitForChild("Team2")
+
+local team1 = Teams:WaitForChild("Team1") :: Team
+local team2 = Teams:WaitForChild("Team2") :: Team
+
+local spectatorsTeam = Teams:FindFirstChild("Spectators") :: Team?
+
+if not spectatorsTeam then
+	spectatorsTeam = Instance.new("Team")
+	spectatorsTeam.Name = "Spectators"
+	spectatorsTeam.TeamColor = BrickColor.new("Medium stone grey")
+	spectatorsTeam.Parent = Teams
+end
 
 local TeamSettings = require(
 	replicatedModules:WaitForChild("TeamSettings")
@@ -1066,8 +1076,12 @@ local TeamSettings = require(
 team1.Name = TeamSettings.teams.Team1.name
 team2.Name = TeamSettings.teams.Team2.name
 
+team1.AutoAssignable = false
+team2.AutoAssignable = false
+spectatorsTeam.AutoAssignable = false
+
 ----------------------------------------------------
--- CICLO DE VIDA DOS JOGADORES
+-- CICLO DE VIDA E ATRIBUIÇÃO DE EQUIPE
 ----------------------------------------------------
 
 local function getTeamSettingsKey(
@@ -1114,16 +1128,11 @@ local function applyTeamUniform(
 
 	local settings = TeamSettings.teams[teamKey]
 
-	if not settings then
+	if not settings or not settings.uniform then
 		return
 	end
 
 	local uniform = settings.uniform
-
-	if not uniform then
-		return
-	end
-
 	local shirtTemplate = getClothingTemplate(uniform.shirt)
 	local pantsTemplate = getClothingTemplate(uniform.pants)
 
@@ -1150,40 +1159,105 @@ local function applyTeamUniform(
 	end
 end
 
-Players.PlayerAdded:Connect(function(plr)
-	local isTeam1 = (#Players:GetPlayers() % 2 ~= 0)
+----------------------------------------------------
+-- ATRIBUIÇÃO CONTROLADA DE EQUIPE
+----------------------------------------------------
 
-	local robloxTeam = if isTeam1 then team1 else team2
-	local team = if isTeam1 then "Team1" else "Team2"
+local function setPlayerTeam(
+	plr: Player,
+	teamKey: string
+): boolean
+	if teamKey ~= "Spectators"
+		and teamKey ~= "Team1"
+		and teamKey ~= "Team2"
+	then
+		return false
+	end
 
-	plr.Team = robloxTeam
+	local oldPlayerData = playersData[plr.UserId]
+	local oldTeam = plr.Team
+	local oldNeutral = plr.Neutral
+	local oldGameTeam = plr:GetAttribute("GameTeam")
+
+	if teamKey == "Spectators" then
+		playersData[plr.UserId] = nil
+
+		inputBuffer:removePlayer(plr.UserId)
+		rebuildSortedUserIds()
+
+		plr.Team = spectatorsTeam
+		plr.Neutral = false
+		plr:SetAttribute("GameTeam", "Spectators")
+
+		return true
+	end
+
+	if oldGameTeam == teamKey and oldPlayerData then
+		return true
+	end
+
+	-- Retira temporariamente o próprio jogador da simulação
+	-- para que ele não bloqueie a busca pelo seu novo spawn.
+	playersData[plr.UserId] = nil
+
+	local spawnPosition, spawnIndex =
+		getPlayerSpawnPosition(teamKey)
+
+	if not spawnPosition or not spawnIndex then
+		-- Se não houver spawn livre, mantém a situação anterior.
+		playersData[plr.UserId] = oldPlayerData
+		rebuildSortedUserIds()
+
+		warn(
+			"Não foi possível mover "
+				.. plr.Name
+				.. " para "
+				.. teamKey
+				.. ": não há spawn livre."
+		)
+
+		return false
+	end
+
+	local newPlayerData = createPlayerFromTemplate(
+		spawnPosition,
+		teamKey,
+		spawnIndex
+	)
+
+	playersData[plr.UserId] = newPlayerData
+
+	inputBuffer:removePlayer(plr.UserId)
+	rebuildSortedUserIds()
+
+	if teamKey == "Team1" then
+		plr.Team = team1
+	else
+		plr.Team = team2
+	end
+
 	plr.Neutral = false
+	plr:SetAttribute("GameTeam", teamKey)
 
+	local character = plr.Character
+
+	if character then
+		applyTeamUniform(plr, character)
+	end
+
+	return true
+end
+
+----------------------------------------------------
+-- ENTRADA: TODOS COMEÇAM COMO ESPECTADORES
+----------------------------------------------------
+
+Players.PlayerAdded:Connect(function(plr)
 	plr.CharacterAdded:Connect(function(character)
 		applyTeamUniform(plr, character)
 	end)
 
-	local spawnPosition, spawnIndex = getPlayerSpawnPosition(team)
-
-	if not spawnPosition or not spawnIndex then
-		warn(
-			"Não foi possível encontrar uma posição de spawn livre para "
-				.. plr.Name
-				.. " ("
-				.. team
-				.. "). O jogador não foi adicionado à simulação física."
-		)
-
-		return
-	end
-
-	playersData[plr.UserId] = createPlayerFromTemplate(
-		spawnPosition,
-		team,
-		spawnIndex
-	)
-
-	rebuildSortedUserIds()
+	setPlayerTeam(plr, "Spectators")
 end)
 
 Players.PlayerRemoving:Connect(function(plr)
