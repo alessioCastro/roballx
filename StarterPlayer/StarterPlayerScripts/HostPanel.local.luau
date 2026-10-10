@@ -24,6 +24,7 @@ type PlayerInfo = {
 	Name: string,
 	IsHost: boolean,
 	JoinOrder: number,
+	TeamKey: string,
 }
 
 type RoomManagementState = {
@@ -44,6 +45,7 @@ local BanPlayerRF = roomRemotes:WaitForChild("BanPlayer") :: RemoteFunction
 local TransferHostRF = roomRemotes:WaitForChild("TransferHost") :: RemoteFunction
 local GetRoomManagementRF = roomRemotes:WaitForChild("GetRoomManagement") :: RemoteFunction
 local RoomManagementUpdatedRE = roomRemotes:WaitForChild("RoomManagementUpdated") :: RemoteEvent
+local SetPlayerTeamRF = roomRemotes:WaitForChild("SetPlayerTeam") :: RemoteFunction
 
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 local previousGui = playerGui:FindFirstChild("HostPanelGui")
@@ -254,6 +256,11 @@ local function parsePlayerInfo(value: unknown): PlayerInfo?
 		Name = raw.Name,
 		IsHost = raw.IsHost,
 		JoinOrder = if type(raw.JoinOrder) == "number" then raw.JoinOrder else 0,
+		TeamKey = if raw.TeamKey == "Team1"
+			or raw.TeamKey == "Team2"
+			or raw.TeamKey == "Spectators"
+			then raw.TeamKey
+			else "Spectators",
 	}
 end
 
