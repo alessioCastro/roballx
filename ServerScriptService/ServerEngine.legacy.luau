@@ -787,49 +787,283 @@ local function createPlayerFromTemplate(
 	)
 end
 
-local function getNextSpawnIndex(
-    team: string
+
+----------------------------------------------------
+-- POSIÇÕES DE SPAWN DOS JOGADORES
+----------------------------------------------------
+
+local SPAWN_GAP = 12
+
+local function getPlayerHalfSize(): Vector2
+	if playerTemplate.size then
+		return playerTemplate.size * 0.5
+	end
+
+	if playerTemplate.a and playerTemplate.b then
+		local length = (playerTemplate.b - playerTemplate.a).Magnitude
+		local radius = (playerTemplate.thickness or 0) * 0.5
+		local halfSize = (length * 0.5) + radius
+
+		return Vector2.new(halfSize, halfSize)
+	end
+
+	return Vector2.new(18, 18)
+end
+
+local function pointSegmentDistance(
+	point: Vector2,
+	a: Vector2,
+	b: Vector2
 ): number
-    local spawnPositions
+	local ab = b - a
+	local lengthSquared = ab:Dot(ab)
 
-    if team == "Team1" then
-        spawnPositions =
-            playerGameplay.spawn.team1Positions
-    else
-        spawnPositions =
-            playerGameplay.spawn.team2Positions
-    end
+	if lengthSquared <= 0 then
+		return (point - a).Magnitude
+	end
 
-    for index = 1, #spawnPositions do
-        local occupied = false
+	local t = math.clamp(
+		(point - a):Dot(ab) / lengthSquared,
+		0,
+		1
+	)
 
-        for _, pData in pairs(playersData) do
-            if pData.team == team
-                and pData.spawnIndex == index
-            then
-                occupied = true
-                break
-            end
-        end
+	return (point - (a + ab * t)).Magnitude
+end
 
-        if not occupied then
-            return index
-        end
-    end
+local function isInsideMapBounds(position: Vector2): boolean
+	local bounds = currentMap.bounds
 
-    error(
-        "Não existem posições de spawn suficientes para o time "
-        .. team
-    )
+	if not bounds then
+		return true
+	end
+
+	local halfSize = getPlayerHalfSize()
+	local width = bounds.width
+	local height = bounds.height
+	local padding = bounds.padding or 0
+
+	if typeof(width) ~= "number"
+		or typeof(height) ~= "number"
+	then
+		return true
+	end
+
+	return math.abs(position.X) + halfSize.X
+			<= width * 0.5 - padding
+		and math.abs(position.Y) + halfSize.Y
+			<= height * 0.5 - padding
+end
+
+local function overlapsSolidObject(position: Vector2): boolean
+	local playerHalfSize = getPlayerHalfSize()
+
+	for _, object in ipairs(collisionObjects) do
+		local objectHalfSize = object.size * 0.5
+		local radians = math.rad(object.rotation or 0)
+		local cos = math.abs(math.cos(radians))
+		local sin = math.abs(math.sin(radians))
+
+		local rotatedHalfSize = Vector2.new(
+			objectHalfSize.X * cos + objectHalfSize.Y * sin,
+			objectHalfSize.X * sin + objectHalfSize.Y * cos
+		)
+
+		local delta = position - object.pos
+
+		if math.abs(delta.X)
+				< playerHalfSize.X + rotatedHalfSize.X + SPAWN_GAP
+			and math.abs(delta.Y)
+				< playerHalfSize.Y + rotatedHalfSize.Y + SPAWN_GAP
+		then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function overlapsSolidSegment(position: Vector2): boolean
+	local halfSize = getPlayerHalfSize()
+	local playerRadius = halfSize.Magnitude
+
+	for _, segment in ipairs(collisionSegments) do
+		local thickness = segment.thickness or 0
+		local segmentRadius = playerRadius + thickness * 0.5 + SPAWN_GAP
+
+		if pointSegmentDistance(position, segment.a, segment.b)
+			< segmentRadius
+		then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function overlapsExistingPlayer(position: Vector2): boolean
+	local halfSize = getPlayerHalfSize()
+
+	for _, player in pairs(playersData) do
+		if player.kind == "object" and player.pos and player.size then
+			local otherHalfSize = player.size * 0.5
+			local delta = position - player.pos
+
+			if math.abs(delta.X)
+					< halfSize.X + otherHalfSize.X + SPAWN_GAP
+				and math.abs(delta.Y)
+					< halfSize.Y + otherHalfSize.Y + SPAWN_GAP
+			then
+				return true
+			end
+		elseif player.kind == "segment" and player.a and player.b then
+			local radius = halfSize.Magnitude
+				+ (player.thickness or 0) * 0.5
+				+ SPAWN_GAP
+
+			if pointSegmentDistance(position, player.a, player.b) < radius then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+local function isSpawnPositionAvailable(position: Vector2): boolean
+	if not isInsideMapBounds(position) then
+		return false
+	end
+
+	if overlapsExistingPlayer(position) then
+		return false
+	end
+
+	if overlapsSolidObject(position) then
+		return false
+	end
+
+	if overlapsSolidSegment(position) then
+		return false
+	end
+
+	return true
+end
+
+local function getConfiguredSpawnPositions(team: string): {any}
+	local spawn = playerGameplay.spawn
+
+	if not spawn then
+		return {}
+	end
+
+	local positions
+
+	if team == "Team1" then
+		positions = spawn.team1Positions
+	else
+		positions = spawn.team2Positions
+	end
+
+	if typeof(positions) ~= "table" then
+		return {}
+	end
+
+	return positions
+end
+
+local function getAutomaticSpawnPosition(
+	team: string
+): (Vector2?, number?)
+	local halfSize = getPlayerHalfSize()
+	local bounds = currentMap.bounds
+
+	local mapWidth = 800
+	local mapHeight = 400
+	local padding = 0
+
+	if bounds then
+		mapWidth = bounds.width or mapWidth
+		mapHeight = bounds.height or mapHeight
+		padding = bounds.padding or 0
+	end
+
+	local minY = -mapHeight * 0.5 + padding + halfSize.Y
+	local maxY = mapHeight * 0.5 - padding - halfSize.Y
+
+	local verticalSpacing = halfSize.Y * 2 + SPAWN_GAP
+	local horizontalSpacing = halfSize.X * 2 + SPAWN_GAP
+
+	if minY > maxY then
+		return nil, nil
+	end
+
+	local side = if team == "Team1" then -1 else 1
+
+	-- A primeira coluna fica no lado da equipe.
+	-- As próximas avançam em direção à lateral do campo.
+	local firstX = mapWidth * 0.25 * side
+	local maxX = mapWidth * 0.5 - padding - halfSize.X
+
+	local columnCount = math.floor(
+		(math.max(0, maxX - math.abs(firstX))) / horizontalSpacing
+	) + 1
+
+	local rowCount = math.floor(
+		(maxY - minY) / verticalSpacing
+	) + 1
+
+	for column = 0, columnCount do
+		local distanceFromCenter = math.abs(firstX)
+			+ column * horizontalSpacing
+
+		if distanceFromCenter > maxX then
+			break
+		end
+
+		local x = side * distanceFromCenter
+
+		for row = 0, rowCount do
+			local y = minY + row * verticalSpacing
+			local candidate = Vector2.new(x, y)
+
+			if isSpawnPositionAvailable(candidate) then
+				return candidate, column * (rowCount + 1) + row + 1
+			end
+		end
+	end
+
+	return nil, nil
+end
+
+local function getPlayerSpawnPosition(
+	team: string
+): (Vector2?, number?)
+	-- As posições manuais têm prioridade, mas não podem
+	-- sobrepor jogadores, sair dos limites ou ocupar obstáculos.
+	local configuredPositions = getConfiguredSpawnPositions(team)
+
+	for index, position in ipairs(configuredPositions) do
+		if typeof(position) == "Vector2"
+			and isSpawnPositionAvailable(position)
+		then
+			return position, index
+		end
+	end
+
+	-- Sem posições configuradas, ou quando elas acabam,
+	-- procurar uma posição livre automaticamente.
+	return getAutomaticSpawnPosition(team)
 end
 
 local team1 = Teams:WaitForChild("Team1")
 local team2 = Teams:WaitForChild("Team2")
 
-local TeamSettings =require(replicatedModules:WaitForChild("TeamSettings"))
+local TeamSettings = require(
+	replicatedModules:WaitForChild("TeamSettings")
+)
 
 team1.Name = TeamSettings.teams.Team1.name
-
 team2.Name = TeamSettings.teams.Team2.name
 
 ----------------------------------------------------
@@ -872,101 +1106,82 @@ local function applyTeamUniform(
 	plr: Player,
 	character: Model
 )
-	local teamKey =
-		getTeamSettingsKey(plr)
+	local teamKey = getTeamSettingsKey(plr)
 
 	if not teamKey then
 		return
 	end
 
-	local settings =
-		TeamSettings.teams[teamKey]
+	local settings = TeamSettings.teams[teamKey]
 
 	if not settings then
 		return
 	end
 
-	local uniform =
-		settings.uniform
+	local uniform = settings.uniform
 
 	if not uniform then
 		return
 	end
 
-	local shirtTemplate =
-		getClothingTemplate(uniform.shirt)
-
-	local pantsTemplate =
-		getClothingTemplate(uniform.pants)
+	local shirtTemplate = getClothingTemplate(uniform.shirt)
+	local pantsTemplate = getClothingTemplate(uniform.pants)
 
 	if shirtTemplate ~= "" then
-		local shirt =
-			character:FindFirstChildOfClass("Shirt")
+		local shirt = character:FindFirstChildOfClass("Shirt")
 
 		if not shirt then
 			shirt = Instance.new("Shirt")
 			shirt.Parent = character
 		end
 
-		shirt.ShirtTemplate =
-			shirtTemplate
+		shirt.ShirtTemplate = shirtTemplate
 	end
 
 	if pantsTemplate ~= "" then
-		local pants =
-			character:FindFirstChildOfClass("Pants")
+		local pants = character:FindFirstChildOfClass("Pants")
 
 		if not pants then
 			pants = Instance.new("Pants")
 			pants.Parent = character
 		end
 
-		pants.PantsTemplate =
-			pantsTemplate
+		pants.PantsTemplate = pantsTemplate
 	end
 end
 
 Players.PlayerAdded:Connect(function(plr)
-	local isTeam1 =
-		(#Players:GetPlayers() % 2 ~= 0)
+	local isTeam1 = (#Players:GetPlayers() % 2 ~= 0)
 
-	local robloxTeam =
-		isTeam1
-		and team1
-		or team2
-
-	local team =
-		isTeam1
-		and "Team1"
-		or "Team2"
+	local robloxTeam = if isTeam1 then team1 else team2
+	local team = if isTeam1 then "Team1" else "Team2"
 
 	plr.Team = robloxTeam
 	plr.Neutral = false
 
 	plr.CharacterAdded:Connect(function(character)
-		applyTeamUniform(
-			plr,
-			character
-		)
+		applyTeamUniform(plr, character)
 	end)
 
-	local spawnIndex =
-		getNextSpawnIndex(team)
+	local spawnPosition, spawnIndex = getPlayerSpawnPosition(team)
 
-	local spawnPositions =
-		isTeam1
-		and playerGameplay.spawn.team1Positions
-		or playerGameplay.spawn.team2Positions
-
-	local spawnPosition =
-		spawnPositions[spawnIndex]
-
-	playersData[plr.UserId] =
-		createPlayerFromTemplate(
-			spawnPosition,
-			team,
-			spawnIndex
+	if not spawnPosition or not spawnIndex then
+		warn(
+			"Não foi possível encontrar uma posição de spawn livre para "
+				.. plr.Name
+				.. " ("
+				.. team
+				.. "). O jogador não foi adicionado à simulação física."
 		)
+
+		return
+	end
+
+	playersData[plr.UserId] = createPlayerFromTemplate(
+		spawnPosition,
+		team,
+		spawnIndex
+	)
 
 	rebuildSortedUserIds()
 end)
