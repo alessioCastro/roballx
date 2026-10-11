@@ -130,7 +130,25 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "HostPanelGui"
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 10
+screenGui.IgnoreGuiInset = true
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
+
+----------------------------------------------------
+-- FUNDO DA SALA / TELA DE PARTIDA PARADA
+----------------------------------------------------
+
+local roomBackground = Instance.new("Frame")
+roomBackground.Name = "RoomBackground"
+roomBackground.Size = UDim2.fromScale(1, 1)
+roomBackground.Position = UDim2.fromScale(0, 0)
+roomBackground.BackgroundColor3 = Color3.fromRGB(10, 12, 17)
+roomBackground.BackgroundTransparency = 0.08
+roomBackground.BorderSizePixel = 0
+roomBackground.Active = true
+roomBackground.Visible = true
+roomBackground.ZIndex = 1
+roomBackground.Parent = screenGui
 
 local openButton = makeButton(
 	screenGui,
@@ -141,6 +159,7 @@ local openButton = makeButton(
 	Color3.fromRGB(35, 39, 49)
 )
 stroke(openButton, Color3.fromRGB(92, 101, 121))
+openButton.ZIndex = 2
 
 local panel = Instance.new("Frame")
 panel.Name = "RoomPanel"
@@ -152,6 +171,7 @@ panel.Visible = false
 panel.Parent = screenGui
 corner(panel, 10)
 stroke(panel, Color3.fromRGB(74, 80, 96))
+panel.ZIndex = 2
 
 local title = makeLabel(
 	panel,
@@ -575,6 +595,7 @@ local function applyMatchState(value: unknown)
 	scoreInput.Text = tostring(parsed.ScoreLimit)
 
 	local statusText = parsed.Status
+
 	if statusText == "Running" then
 		matchStatusLabel.Text = "Partida em andamento"
 		startStopButton.Text = "Parar"
@@ -589,14 +610,42 @@ local function applyMatchState(value: unknown)
 		pauseButton.Text = "Pausar"
 	end
 
+	local stopped = statusText == "Stopped"
+
+	------------------------------------------------
+	-- APRESENTAÇÃO DA SALA
+	------------------------------------------------
+
+	roomBackground.Visible = stopped
+
+	if stopped then
+		-- A tela de sala deve permanecer aberta enquanto
+		-- não houver uma partida em andamento.
+		panel.Visible = true
+		openButton.Visible = false
+		closeButton.Visible = false
+
+		contextMenu.Visible = false
+		banConfirm.Visible = false
+	else
+		openButton.Visible = true
+		closeButton.Visible = true
+	end
+
+	------------------------------------------------
+	-- PERMISSÕES DO HOST
+	------------------------------------------------
+
 	local host = isLocalHost()
+
 	saveSettingsButton.Visible = host
-	timeInput.TextEditable = host and parsed.Status == "Stopped"
-	scoreInput.TextEditable = host and parsed.Status == "Stopped"
+	timeInput.TextEditable = host and stopped
+	scoreInput.TextEditable = host and stopped
 
 	startStopButton.Visible = host
 	pauseButton.Visible = host
-	saveSettingsButton.Active = host and parsed.Status == "Stopped"
+
+	saveSettingsButton.Active = host and stopped
 end
 
 local function renderPlayerList()
@@ -698,15 +747,14 @@ local function renderPlayerList()
 					draggingPlayer = nil
 
 					local mouse = UserInputService:GetMouseLocation()
-					local inset = GuiService:GetGuiInset()
 					local camera = workspace.CurrentCamera
 					local viewport = if camera
 						then camera.ViewportSize
 						else Vector2.new(800, 600)
 
 					contextMenu.Position = UDim2.fromOffset(
-						math.clamp(mouse.X - inset.X, 0, math.max(0, viewport.X - 154)),
-						math.clamp(mouse.Y - inset.Y, 0, math.max(0, viewport.Y - 124))
+						math.clamp(mouse.X, 0, math.max(0, viewport.X - 154)),
+						math.clamp(mouse.Y, 0, math.max(0, viewport.Y - 124))
 					)
 					contextMenu.Visible = true
 					return
@@ -925,6 +973,19 @@ UserInputService.InputBegan:Connect(function(input)
 		return
 	end
 
+	local state = currentState and currentState.MatchState
+	local status = if state
+		then state.Status
+		else ReplicatedStorage:GetAttribute("MatchStatus")
+
+	if status == "Stopped" or status == nil then
+		panel.Visible = true
+		roomBackground.Visible = true
+		openButton.Visible = false
+		closeButton.Visible = false
+		return
+	end
+
 	panel.Visible = not panel.Visible
 	contextMenu.Visible = false
 	banConfirm.Visible = false
@@ -1044,8 +1105,6 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 
 	local mouse = UserInputService:GetMouseLocation()
-	local inset = GuiService:GetGuiInset()
-	mouse -= inset
 
 	local targetTeam: string? = nil
 
