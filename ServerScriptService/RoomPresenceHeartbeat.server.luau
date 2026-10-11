@@ -9,9 +9,31 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 local TeleportService = game:GetService("TeleportService")
-local MatchControl = require(
-	ServerScriptService:WaitForChild("Modules"):WaitForChild("MatchControl")
-)
+
+local IS_ROOM_SERVER = game.PrivateServerId ~= "" and game.VIPServerOwnerId == 0
+ReplicatedStorage:SetAttribute("IsRoomServer", IS_ROOM_SERVER)
+
+if not IS_ROOM_SERVER then return end
+
+local MatchControl = require(ServerScriptService:WaitForChild("Modules"):WaitForChild("MatchControl"))
+
+local replicatedRoomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
+local replicatedGameRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
+
+-- RemoteFunctions retornam sucesso/erro ao menu do host. O evento atualiza os
+-- clientes quando host, lotacao ou permissao de migracao mudarem.
+
+local GetRoomManagementRF = replicatedRoomRemotes:WaitForChild("GetRoomManagement") :: RemoteFunction
+local RoomManagementUpdatedRE = replicatedRoomRemotes:WaitForChild("RoomManagementUpdated") :: RemoteEvent
+
+local KickPlayerRF = replicatedGameRemotes:WaitForChild("KickPlayer") :: RemoteFunction
+local BanPlayerRF = replicatedGameRemotes:WaitForChild("BanPlayer") :: RemoteFunction
+local TransferHostRF = replicatedGameRemotes:WaitForChild("TransferHost") :: RemoteFunction
+local SetPlayerTeamRF = replicatedGameRemotes:WaitForChild("SetPlayerTeam") :: RemoteFunction
+local setPlayerTeamRequest = ServerScriptService:WaitForChild("SetPlayerTeamRequest") :: BindableFunction
+local MatchControlRequestRF = replicatedGameRemotes:WaitForChild("MatchControlRequest") :: RemoteFunction
+local MatchStateUpdatedRE = replicatedGameRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
+
 
 local GAME_PLACE_ID = game.PlaceId
 local RoomsMap = MemoryStoreService:GetSortedMap("GlobalRoomsList")
@@ -56,56 +78,6 @@ type PlayerSummary = {
 	JoinOrder: number,
 	TeamKey: string,
 }
-
-local IS_ROOM_SERVER = game.PrivateServerId ~= "" and game.VIPServerOwnerId == 0
-ReplicatedStorage:SetAttribute("IsRoomServer", IS_ROOM_SERVER)
-
-if not IS_ROOM_SERVER then
-	return
-end
-
-local roomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
-
-local function getOrCreateRemoteFunction(name: string): RemoteFunction
-	local existing = roomRemotes:FindFirstChild(name)
-	if existing ~= nil then
-		assert(existing:IsA("RemoteFunction"), (`{name} deve ser uma RemoteFunction.`))
-		return existing
-	end
-
-	local remote = Instance.new("RemoteFunction")
-	remote.Name = name
-	remote.Parent = roomRemotes
-	return remote
-end
-
-local function getOrCreateRemoteEvent(name: string): RemoteEvent
-	local existing = roomRemotes:FindFirstChild(name)
-	if existing ~= nil then
-		assert(existing:IsA("RemoteEvent"), (`{name} deve ser uma RemoteEvent.`))
-		return existing
-	end
-
-	local remote = Instance.new("RemoteEvent")
-	remote.Name = name
-	remote.Parent = roomRemotes
-	return remote
-end
-
--- RemoteFunctions retornam sucesso/erro ao menu do host. O evento atualiza os
--- clientes quando host, lotacao ou permissao de migracao mudarem.
-local KickPlayerRF = getOrCreateRemoteFunction("KickPlayer")
-local BanPlayerRF = getOrCreateRemoteFunction("BanPlayer")
-local TransferHostRF = getOrCreateRemoteFunction("TransferHost")
-local GetRoomManagementRF = getOrCreateRemoteFunction("GetRoomManagement")
-local RoomManagementUpdatedRE = getOrCreateRemoteEvent("RoomManagementUpdated")
-local SetPlayerTeamRF = getOrCreateRemoteFunction("SetPlayerTeam")
-local setPlayerTeamRequest =
-	ServerScriptService:WaitForChild(
-		"SetPlayerTeamRequest"
-	) :: BindableFunction
-local MatchControlRequestRF = getOrCreateRemoteFunction("MatchControlRequest")
-local MatchStateUpdatedRE = getOrCreateRemoteEvent("MatchStateUpdated")
 
 local function retryMemoryStore<T>(label: string, operation: () -> T): (boolean, T?)
 	for attempt = 1, MAX_MEMORYSTORE_ATTEMPTS do
