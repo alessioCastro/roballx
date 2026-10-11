@@ -1032,6 +1032,26 @@ local mapElements =
 	)
 
 ----------------------------------------------------
+-- VISIBILIDADE DO CAMPO CONFORME O ESTADO DA PARTIDA
+----------------------------------------------------
+
+local function updateMapVisibility()
+	local status = ReplicatedStorage:GetAttribute("MatchStatus")
+
+	-- O campo fica oculto quando a partida está parada.
+	-- Durante a pausa, o campo continua visível, mas congelado.
+	mapElements.screenGui.Enabled =
+		status == "Running"
+		or status == "Paused"
+end
+
+updateMapVisibility()
+
+ReplicatedStorage:GetAttributeChangedSignal("MatchStatus"):Connect(
+	updateMapVisibility
+)
+
+----------------------------------------------------
 -- REMOVER O MOLDE DO PLAYER DO MAPA
 ----------------------------------------------------
 
