@@ -1,4 +1,3 @@
-
 --!strict
 -- HostPanel.local.luau
 -- Painel unificado da sala.
@@ -22,25 +21,20 @@ if isRoomServer ~= true then
 	return
 end
 
-local RoomController = require(
-	ReplicatedStorage:WaitForChild("Modules"):WaitForChild("RoomController")
-)
+local RoomController = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("RoomController"))
+local TeamSettings = require(ReplicatedStorage:WaitForChild("Modules"):WaitForChild("TeamSettings"))
 
-local TeamSettings = require(
-	ReplicatedStorage:WaitForChild("Modules"):WaitForChild("TeamSettings")
-)
+local replicatedRoomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
+local replicatedGameRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("GameRemotes")
 
-local roomRemotes =
-	ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
-
-local KickPlayerRF = roomRemotes:WaitForChild("KickPlayer") :: RemoteFunction
-local BanPlayerRF = roomRemotes:WaitForChild("BanPlayer") :: RemoteFunction
-local TransferHostRF = roomRemotes:WaitForChild("TransferHost") :: RemoteFunction
-local GetRoomManagementRF = roomRemotes:WaitForChild("GetRoomManagement") :: RemoteFunction
-local RoomManagementUpdatedRE = roomRemotes:WaitForChild("RoomManagementUpdated") :: RemoteEvent
-local SetPlayerTeamRF = roomRemotes:WaitForChild("SetPlayerTeam") :: RemoteFunction
-local MatchControlRequestRF = roomRemotes:WaitForChild("MatchControlRequest") :: RemoteFunction
-local MatchStateUpdatedRE = roomRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
+local GetRoomManagementRF = replicatedRoomRemotes:WaitForChild("GetRoomManagement") :: RemoteFunction
+local RoomManagementUpdatedRE = replicatedRoomRemotes:WaitForChild("RoomManagementUpdated") :: RemoteEvent
+local SetPlayerTeamRF = replicatedGameRemotes:WaitForChild("SetPlayerTeam") :: RemoteFunction
+local MatchControlRequestRF = replicatedGameRemotes:WaitForChild("MatchControlRequest") :: RemoteFunction
+local MatchStateUpdatedRE = replicatedGameRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
+local KickPlayerRF = replicatedGameRemotes:WaitForChild("KickPlayer") :: RemoteFunction
+local BanPlayerRF = replicatedGameRemotes:WaitForChild("BanPlayer") :: RemoteFunction
+local TransferHostRF = replicatedGameRemotes:WaitForChild("TransferHost") :: RemoteFunction
 
 type PlayerInfo = {
 	UserId: number,
