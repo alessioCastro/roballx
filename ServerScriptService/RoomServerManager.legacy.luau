@@ -57,30 +57,15 @@ type CreateRoomConfig = {
 	AllowHostMigration: unknown,
 }
 
-local roomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
-local CreateRoomRF = roomRemotes:WaitForChild("CreateRoom") :: RemoteFunction
-local JoinRoomRF = roomRemotes:WaitForChild("JoinRoom") :: RemoteFunction
-local LeaveRoomRF = roomRemotes:WaitForChild("LeaveRoom") :: RemoteFunction
-local GetRoomsRF = roomRemotes:WaitForChild("GetRooms") :: RemoteFunction
-local RoomListUpdatedRE = roomRemotes:WaitForChild("RoomListUpdated") :: RemoteEvent
+local replicatedRoomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
 
--- Estes dois Remotes sao criados no servidor caso nao existam no Explorer; a
--- criacao no servidor faz com que ambos sejam replicados para os clientes.
-local function getOrCreateRemoteFunction(name: string): RemoteFunction
-	local existing = roomRemotes:FindFirstChild(name)
-	if existing ~= nil then
-		assert(existing:IsA("RemoteFunction"), (`{name} deve ser uma RemoteFunction.`))
-		return existing
-	end
-
-	local remote = Instance.new("RemoteFunction")
-	remote.Name = name
-	remote.Parent = roomRemotes
-	return remote
-end
-
-local ResolveRoomCodeRF = getOrCreateRemoteFunction("ResolveRoomCode")
-local JoinRoomByCodeRF = getOrCreateRemoteFunction("JoinRoomByCode")
+local CreateRoomRF = replicatedRoomRemotes:WaitForChild("CreateRoom") :: RemoteFunction
+local JoinRoomRF = replicatedRoomRemotes:WaitForChild("JoinRoom") :: RemoteFunction
+local LeaveRoomRF = replicatedRoomRemotes:WaitForChild("LeaveRoom") :: RemoteFunction
+local GetRoomsRF = replicatedRoomRemotes:WaitForChild("GetRooms") :: RemoteFunction
+local RoomListUpdatedRE = replicatedRoomRemotes:WaitForChild("RoomListUpdated") :: RemoteEvent
+local ResolveRoomCodeRF = replicatedRoomRemotes:WaitForChild("ResolveRoomCode") :: RemoteFunction
+local JoinRoomByCodeRF = replicatedRoomRemotes:WaitForChild("JoinRoomByCode") :: RemoteFunction
 
 -- ReserveServerAsync cria PrivateServerId sem owner; um VIP server tem owner.
 local IS_ROOM_SERVER = game.PrivateServerId ~= "" and game.VIPServerOwnerId == 0
