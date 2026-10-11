@@ -354,7 +354,7 @@ statusLabel.TextTruncate = Enum.TextTruncate.AtEnd
 local leaveButton = makeButton(
 	panel,
 	"LeaveRoom",
-	"Voltar ao Lobby",
+	"Leave",
 	UDim2.fromOffset(160, 32),
 	UDim2.new(1, -178, 1, -39),
 	Color3.fromRGB(158, 51, 51)
