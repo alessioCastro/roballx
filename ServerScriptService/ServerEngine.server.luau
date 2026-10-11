@@ -21,7 +21,8 @@ local MatchManager = require(serverModules:WaitForChild("MatchManager"))
 local MatchControl = require(serverModules:WaitForChild("MatchControl"))
 
 local roomRemotes = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoomRemotes")
-local matchStateUpdatedEvent = roomRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
+
+local matchStateUpdatedEvent = replicatedGameRemotes:WaitForChild("MatchStateUpdated") :: RemoteEvent
 local gameInputEvent = replicatedGameRemotes:WaitForChild("GameInput")
 
 ----------------------------------------------------
@@ -1184,20 +1185,9 @@ end
 -- SOLICITAÇÕES DE MUDANÇA DE EQUIPE
 ----------------------------------------------------
 
-local setPlayerTeamRequest =
-	script.Parent:FindFirstChild("SetPlayerTeamRequest")
+local setPlayerTeamRequest = script.Parent:FindFirstChild("SetPlayerTeamRequest") :: BindableFunction
 
-if setPlayerTeamRequest == nil then
-	local bindable = Instance.new("BindableFunction")
-	bindable.Name = "SetPlayerTeamRequest"
-	bindable.Parent = script.Parent
-	setPlayerTeamRequest = bindable
-end
-
-local teamRequestFunction =
-	setPlayerTeamRequest :: BindableFunction
-
-teamRequestFunction.OnInvoke = function(
+setPlayerTeamRequest.OnInvoke = function(
 	targetUserId: number,
 	teamKey: string
 ): (boolean, string)
