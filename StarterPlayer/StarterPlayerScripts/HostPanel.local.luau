@@ -696,7 +696,11 @@ local function renderPlayerList()
 		header.Size = UDim2.new(1, 0, 0, 28)
 		header.BackgroundColor3 = Color3.fromRGB(35, 39, 49)
 		header.BorderSizePixel = 0
-		header.Text = string.format("  %s  (%d)", teamNames[teamKey], #members)
+		header.Text = string.format(
+			"  %s  (%d)",
+			teamNames[teamKey],
+			#members
+		)
 		header.TextColor3 = Color3.fromRGB(255, 213, 105)
 		header.TextSize = 12
 		header.TextXAlignment = Enum.TextXAlignment.Left
@@ -705,15 +709,24 @@ local function renderPlayerList()
 		corner(header, 5)
 
 		for memberIndex, info in ipairs(members) do
-			local row = Instance.new("Frame")
+			-- Um TextButton recebe a interação diretamente, ao contrário
+			-- de depender de um Frame para iniciar o arraste.
+			local row = Instance.new("TextButton")
 			row.Name = "Player_" .. tostring(info.UserId)
 			row.Size = UDim2.new(1, 0, 0, 32)
-			row.Position = UDim2.fromOffset(0, 32 + (memberIndex - 1) * 36)
-			row.BackgroundColor3 = if info.UserId == LocalPlayer.UserId
+			row.Position = UDim2.fromOffset(
+				0,
+				32 + (memberIndex - 1) * 36
+			)
+			row.BackgroundColor3 =
+				if info.UserId == LocalPlayer.UserId
 				then Color3.fromRGB(64, 55, 35)
 				else Color3.fromRGB(45, 49, 61)
 			row.BorderSizePixel = 0
+			row.Text = ""
+			row.AutoButtonColor = false
 			row.Active = true
+			row.Selectable = false
 			row.Parent = section
 			corner(row, 5)
 
@@ -722,6 +735,7 @@ local function renderPlayerList()
 			nameLabel.Size = UDim2.new(1, -16, 1, 0)
 			nameLabel.Position = UDim2.fromOffset(10, 0)
 			nameLabel.BackgroundTransparency = 1
+			nameLabel.Active = false
 			nameLabel.Text = if info.IsHost
 				then info.Name .. "  (Host)"
 				else info.Name
@@ -760,14 +774,26 @@ local function renderPlayerList()
 					return
 				end
 
-				if input.UserInputType == Enum.UserInputType.MouseButton1
-					and draggingEnabled
-					and not actionInFlight
-				then
-					contextMenu.Visible = false
-					contextTarget = nil
-					draggingPlayer = info
+				if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+					return
 				end
+
+				if not draggingEnabled
+					or actionInFlight
+					or not isLocalHost()
+				then
+					return
+				end
+
+				contextMenu.Visible = false
+				banConfirm.Visible = false
+				contextTarget = nil
+				draggingPlayer = info
+
+				setStatus(
+					"Movendo " .. info.Name
+						.. ": solte na equipe de destino."
+				)
 			end)
 		end
 	end
@@ -1105,6 +1131,14 @@ UserInputService.InputEnded:Connect(function(input)
 	end
 
 	local mouse = UserInputService:GetMouseLocation()
+	local inset = GuiService:GetGuiInset()
+
+	-- Testa as duas referências de coordenadas para evitar diferenças
+	-- entre a posição do mouse e a área útil da interface.
+	local mousePositions = {
+		mouse,
+		mouse - inset,
+	}
 
 	local targetTeam: string? = nil
 
@@ -1114,6 +1148,7 @@ UserInputService.InputEnded:Connect(function(input)
 		end
 
 		local teamKey = child.Name:gsub("^Group_", "")
+
 		if teamKey ~= "Spectators"
 			and teamKey ~= "Team1"
 			and teamKey ~= "Team2"
@@ -1124,25 +1159,43 @@ UserInputService.InputEnded:Connect(function(input)
 		local position = child.AbsolutePosition
 		local size = child.AbsoluteSize
 
-		if mouse.X >= position.X
-			and mouse.X <= position.X + size.X
-			and mouse.Y >= position.Y
-			and mouse.Y <= position.Y + size.Y
-		then
-			targetTeam = teamKey
+		for _, mousePosition in ipairs(mousePositions) do
+			local inside =
+				mousePosition.X >= position.X
+				and mousePosition.X <= position.X + size.X
+				and mousePosition.Y >= position.Y
+				and mousePosition.Y <= position.Y + size.Y
+
+			if inside then
+				targetTeam = teamKey
+				break
+			end
+		end
+
+		if targetTeam then
 			break
 		end
 	end
 
-	if not targetTeam or targetTeam == info.TeamKey then
+	if not targetTeam then
+		setStatus("Solte o jogador dentro de um dos grupos de equipe.", true)
+		return
+	end
+
+	if targetTeam == info.TeamKey then
+		setStatus("O jogador já pertence a essa equipe.")
 		return
 	end
 
 	actionInFlight = true
+	setStatus("Alterando a equipe de " .. info.Name .. "...")
 
 	task.spawn(function()
 		local callOk, serverOk, response = pcall(function()
-			return SetPlayerTeamRF:InvokeServer(info.UserId, targetTeam)
+			return SetPlayerTeamRF:InvokeServer(
+				info.UserId,
+				targetTeam
+			)
 		end)
 
 		actionInFlight = false
@@ -1151,7 +1204,9 @@ UserInputService.InputEnded:Connect(function(input)
 			setStatus("Falha de conexão ao alterar a equipe.", true)
 		else
 			setStatus(
-				if type(response) == "string" then response else "Equipe atualizada.",
+				if type(response) == "string"
+				then response
+				else "Equipe atualizada.",
 				serverOk ~= true
 			)
 		end
